@@ -1,0 +1,280 @@
+---
+title: Database schema
+description: PostgreSQL schema for BidCo including all tables, columns, data types, foreign key relationships, and entity relationship overview.
+---
+
+BidCo uses a PostgreSQL database hosted on Aiven. The schema contains seven tables organized around two primary user types (regular users and staff workers), two event types (auctions and raffles), and their associated bid and comment records.
+
+## Tables overview
+
+| Table | Description |
+|-------|-------------|
+| `usuario` | Registered end users who browse, bid, and create auctions |
+| `trabajador` | Internal staff: admins and domain experts |
+| `subasta` | Auction events (normal or blind) created by users |
+| `puja` | Bids placed by users on auctions |
+| `sorteo` | Raffle events created by workers |
+| `puja_sorteo` | Points entries submitted by users to enter raffles |
+| `comentario` | Expert comments with price estimates on auctions |
+
+## Table definitions
+
+<Tabs>
+  <Tab title="usuario">
+    Stores registered end-user accounts. Each user has an address, a monetary balance for auction bidding, and a points balance for raffle entries.
+
+    ```sql
+    CREATE TABLE usuario (
+        usuario_id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+        nombre_usuario          VARCHAR(255) NOT NULL UNIQUE,
+        correo_electronico      VARCHAR(255) NOT NULL UNIQUE,
+        contraseña              VARCHAR(255) NOT NULL,
+        saldo                   DECIMAL(10,2) NOT NULL,
+        puntos                  INT NOT NULL,
+        pais                    VARCHAR(255) NOT NULL,
+        ciudad                  VARCHAR(255) NOT NULL,
+        codigo_postal           VARCHAR(255) NOT NULL,
+        calle                   VARCHAR(255) NOT NULL,
+        numero_piso             INT DEFAULT 0,
+        letra_piso              VARCHAR(10) DEFAULT ' ',
+        privacidad_anonimo_pujas    BOOLEAN DEFAULT FALSE,
+        privacidad_estadisticas     BOOLEAN DEFAULT TRUE,
+        privacidad_perfil_visible   BOOLEAN DEFAULT TRUE
+    );
+    ```
+
+    | Column | Type | Constraints | Description |
+    |--------|------|-------------|-------------|
+    | `usuario_id` | BIGINT | PK, AUTO_INCREMENT | Surrogate primary key |
+    | `nombre_usuario` | VARCHAR(255) | NOT NULL, UNIQUE | Display name / username |
+    | `correo_electronico` | VARCHAR(255) | NOT NULL, UNIQUE | Email address |
+    | `contraseña` | VARCHAR(255) | NOT NULL | Hashed password |
+    | `saldo` | DECIMAL(10,2) | NOT NULL | Monetary balance for bidding |
+    | `puntos` | INT | NOT NULL | Points balance for raffle entries |
+    | `pais` | VARCHAR(255) | NOT NULL | Country |
+    | `ciudad` | VARCHAR(255) | NOT NULL | City |
+    | `codigo_postal` | VARCHAR(255) | NOT NULL | Postal code |
+    | `calle` | VARCHAR(255) | NOT NULL | Street address |
+    | `numero_piso` | INT | DEFAULT 0 | Floor number |
+    | `letra_piso` | VARCHAR(10) | DEFAULT ' ' | Floor letter/unit |
+    | `privacidad_anonimo_pujas` | BOOLEAN | DEFAULT FALSE | Hide identity on bids |
+    | `privacidad_estadisticas` | BOOLEAN | DEFAULT TRUE | Allow statistics visibility |
+    | `privacidad_perfil_visible` | BOOLEAN | DEFAULT TRUE | Allow profile to be viewed |
+  </Tab>
+  <Tab title="trabajador">
+    Stores internal staff accounts. The `rol_trabajador` boolean distinguishes between admins (`FALSE`) and experts (`TRUE`).
+
+    ```sql
+    CREATE TABLE trabajador (
+        trabajador_id       BIGINT AUTO_INCREMENT PRIMARY KEY,
+        nombre_usuario      VARCHAR(255) NOT NULL UNIQUE,
+        correo_electronico  VARCHAR(255) NOT NULL UNIQUE,
+        contraseña          VARCHAR(255) NOT NULL,
+        rol_trabajador      BOOLEAN NOT NULL
+    );
+    ```
+
+    | Column | Type | Constraints | Description |
+    |--------|------|-------------|-------------|
+    | `trabajador_id` | BIGINT | PK, AUTO_INCREMENT | Surrogate primary key |
+    | `nombre_usuario` | VARCHAR(255) | NOT NULL, UNIQUE | Staff username |
+    | `correo_electronico` | VARCHAR(255) | NOT NULL, UNIQUE | Staff email |
+    | `contraseña` | VARCHAR(255) | NOT NULL | Hashed password |
+    | `rol_trabajador` | BOOLEAN | NOT NULL | `FALSE` = admin, `TRUE` = expert |
+  </Tab>
+  <Tab title="subasta">
+    Stores auction events. The `subasta_normal` flag distinguishes normal auctions (bids are visible) from blind auctions (bids are hidden from other participants).
+
+    ```sql
+    CREATE TABLE subasta (
+        subasta_id      BIGINT AUTO_INCREMENT PRIMARY KEY,
+        fecha_inicial   DATE NOT NULL,
+        fecha_final     DATE NOT NULL,
+        precio_inicial  DECIMAL(10,2) DEFAULT 0.00,
+        precio_final    DECIMAL(10,2) DEFAULT 0.00,
+        subasta_normal  BOOLEAN NOT NULL,
+        nombre_articulo VARCHAR(255) NOT NULL,
+        descripcion     TEXT NOT NULL,
+        imagen          VARCHAR(255),
+        creador_id      BIGINT NOT NULL,
+        ganador_id      BIGINT,
+        categoria       VARCHAR(255),
+        FOREIGN KEY (creador_id) REFERENCES usuario(usuario_id)
+    );
+    ```
+
+    | Column | Type | Constraints | Description |
+    |--------|------|-------------|-------------|
+    | `subasta_id` | BIGINT | PK, AUTO_INCREMENT | Surrogate primary key |
+    | `fecha_inicial` | DATE | NOT NULL | Auction start date |
+    | `fecha_final` | DATE | NOT NULL | Auction end date |
+    | `precio_inicial` | DECIMAL(10,2) | DEFAULT 0.00 | Starting price |
+    | `precio_final` | DECIMAL(10,2) | DEFAULT 0.00 | Current highest bid (updated as bids arrive) |
+    | `subasta_normal` | BOOLEAN | NOT NULL | `TRUE` = normal, `FALSE` = blind |
+    | `nombre_articulo` | VARCHAR(255) | NOT NULL | Item name |
+    | `descripcion` | TEXT | NOT NULL | Item description |
+    | `imagen` | VARCHAR(255) | — | Image filename (served from `/uploads/`) |
+    | `creador_id` | BIGINT | FK → `usuario` | The user who created the auction |
+    | `ganador_id` | BIGINT | — | ID of the winning bidder (set when auction closes) |
+    | `categoria` | VARCHAR(255) | — | Category tag (e.g., `moda`, `tecnologia`, `hogar`) |
+  </Tab>
+  <Tab title="puja">
+    Records individual bids placed on auctions.
+
+    ```sql
+    CREATE TABLE puja (
+        puja_id     BIGINT AUTO_INCREMENT PRIMARY KEY,
+        fecha       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        importe     DECIMAL(10,2) NOT NULL,
+        ganadora    BOOLEAN DEFAULT FALSE,
+        usuario_id  BIGINT NOT NULL,
+        subasta_id  BIGINT NOT NULL,
+        FOREIGN KEY (usuario_id) REFERENCES usuario(usuario_id),
+        FOREIGN KEY (subasta_id) REFERENCES subasta(subasta_id)
+    );
+    ```
+
+    | Column | Type | Constraints | Description |
+    |--------|------|-------------|-------------|
+    | `puja_id` | BIGINT | PK, AUTO_INCREMENT | Surrogate primary key |
+    | `fecha` | DATETIME | NOT NULL, DEFAULT NOW | Timestamp when the bid was placed |
+    | `importe` | DECIMAL(10,2) | NOT NULL | Bid amount |
+    | `ganadora` | BOOLEAN | DEFAULT FALSE | Marked `TRUE` when this bid wins the auction |
+    | `usuario_id` | BIGINT | FK → `usuario` | The bidder |
+    | `subasta_id` | BIGINT | FK → `subasta` | The auction being bid on |
+  </Tab>
+  <Tab title="sorteo">
+    Stores raffle events. Users enter by spending points. At close, a winner is drawn from all entries.
+
+    ```sql
+    CREATE TABLE sorteo (
+        sorteo_id           BIGINT AUTO_INCREMENT PRIMARY KEY,
+        nombre_articulo     VARCHAR(255) NOT NULL,
+        descripcion         TEXT NOT NULL,
+        fecha_inicio        DATE NOT NULL,
+        fecha_fin           DATE NOT NULL,
+        puntos_necesarios   INT NOT NULL,
+        puntos_finales      INT DEFAULT 0,
+        trabajador_id       BIGINT NOT NULL,
+        ganador_id          BIGINT,
+        imagen              VARCHAR(255),
+        categoria           VARCHAR(255),
+        FOREIGN KEY (trabajador_id) REFERENCES trabajador(trabajador_id)
+    );
+    ```
+
+    | Column | Type | Constraints | Description |
+    |--------|------|-------------|-------------|
+    | `sorteo_id` | BIGINT | PK, AUTO_INCREMENT | Surrogate primary key |
+    | `nombre_articulo` | VARCHAR(255) | NOT NULL | Prize name |
+    | `descripcion` | TEXT | NOT NULL | Prize description |
+    | `fecha_inicio` | DATE | NOT NULL | Raffle start date |
+    | `fecha_fin` | DATE | NOT NULL | Raffle end date |
+    | `puntos_necesarios` | INT | NOT NULL | Points required per entry |
+    | `puntos_finales` | INT | DEFAULT 0 | Total points accumulated across all entries |
+    | `trabajador_id` | BIGINT | FK → `trabajador` | The admin who created the raffle |
+    | `ganador_id` | BIGINT | — | ID of the winning user (set at close) |
+    | `imagen` | VARCHAR(255) | — | Image filename |
+    | `categoria` | VARCHAR(255) | — | Category tag |
+  </Tab>
+  <Tab title="puja_sorteo">
+    Records point entries submitted by users to participate in a raffle.
+
+    ```sql
+    CREATE TABLE puja_sorteo (
+        puja_sorteo_id  BIGINT AUTO_INCREMENT PRIMARY KEY,
+        fecha           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        puntos          DECIMAL(10,2) NOT NULL,
+        usuario_id      BIGINT NOT NULL,
+        sorteo_id       BIGINT NOT NULL,
+        FOREIGN KEY (usuario_id) REFERENCES usuario(usuario_id),
+        FOREIGN KEY (sorteo_id) REFERENCES sorteo(sorteo_id)
+    );
+    ```
+
+    | Column | Type | Constraints | Description |
+    |--------|------|-------------|-------------|
+    | `puja_sorteo_id` | BIGINT | PK, AUTO_INCREMENT | Surrogate primary key |
+    | `fecha` | DATETIME | NOT NULL, DEFAULT NOW | Timestamp of entry |
+    | `puntos` | DECIMAL(10,2) | NOT NULL | Points committed by the user for this entry |
+    | `usuario_id` | BIGINT | FK → `usuario` | The user entering the raffle |
+    | `sorteo_id` | BIGINT | FK → `sorteo` | The raffle being entered |
+  </Tab>
+  <Tab title="comentario">
+    Expert comments on auctions. Each comment includes a price estimate provided by a domain expert (`Trabajador` with `experto = TRUE`).
+
+    ```sql
+    CREATE TABLE comentario (
+        comentario_id   BIGINT AUTO_INCREMENT PRIMARY KEY,
+        comentario      TEXT NOT NULL,
+        precio_estimado DECIMAL(10,2) NOT NULL,
+        fecha           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        trabajador_id   BIGINT NOT NULL,
+        subasta_id      BIGINT NOT NULL,
+        FOREIGN KEY (trabajador_id) REFERENCES trabajador(trabajador_id),
+        FOREIGN KEY (subasta_id) REFERENCES subasta(subasta_id)
+    );
+    ```
+
+    | Column | Type | Constraints | Description |
+    |--------|------|-------------|-------------|
+    | `comentario_id` | BIGINT | PK, AUTO_INCREMENT | Surrogate primary key |
+    | `comentario` | TEXT | NOT NULL | Comment body text |
+    | `precio_estimado` | DECIMAL(10,2) | NOT NULL | Expert's estimated market value |
+    | `fecha` | DATETIME | NOT NULL, DEFAULT NOW | Timestamp of the comment |
+    | `trabajador_id` | BIGINT | FK → `trabajador` | The expert who posted the comment |
+    | `subasta_id` | BIGINT | FK → `subasta` | The auction being commented on |
+  </Tab>
+</Tabs>
+
+## Entity relationships
+
+The diagram below describes the relationships between all tables:
+
+| Relationship | Type | Description |
+|-------------|------|-------------|
+| `usuario` → `subasta` | One-to-many | A user can create many auctions (`creador_id`) |
+| `usuario` → `puja` | One-to-many | A user can place many bids |
+| `usuario` → `puja_sorteo` | One-to-many | A user can enter many raffles |
+| `subasta` → `puja` | One-to-many | An auction has many bids |
+| `subasta` → `comentario` | One-to-many | An auction has many expert comments |
+| `trabajador` → `sorteo` | One-to-many | A worker (admin) creates many raffles |
+| `trabajador` → `comentario` | One-to-many | An expert posts many comments |
+| `sorteo` → `puja_sorteo` | One-to-many | A raffle has many point entries |
+
+<Note>
+  The `ganador_id` columns on `subasta` and `sorteo` store the winning user's ID as a plain `BIGINT` rather than a declared foreign key. This is intentional — it avoids a hard FK constraint at close time and allows the winner to be computed and stored by the service layer.
+</Note>
+
+## Drop order
+
+Because of foreign key dependencies, tables must be dropped in the following order (child tables before parent tables):
+
+```sql
+DROP TABLE IF EXISTS puja_sorteo;
+DROP TABLE IF EXISTS puja;
+DROP TABLE IF EXISTS comentario;
+DROP TABLE IF EXISTS sorteo;
+DROP TABLE IF EXISTS subasta;
+DROP TABLE IF EXISTS trabajador;
+DROP TABLE IF EXISTS usuario;
+```
+
+## Seed data
+
+The `database.sql` file includes seed data for development and testing:
+
+<CardGroup cols={2}>
+  <Card title="Users" icon="users">
+    2 users: `juanperez` and `anagarcia`, both located in Madrid, Spain. Starting balances of 100.00 and 200.00 respectively.
+  </Card>
+  <Card title="Workers" icon="briefcase">
+    3 workers: `admin` (admin role), `pedro` and `jose` (both experts).
+  </Card>
+  <Card title="Auctions" icon="gavel">
+    4 auctions across categories `moda`, `tecnologia`, and `hogar`. Two are normal auctions, two are blind auctions.
+  </Card>
+  <Card title="Raffles" icon="ticket">
+    3 raffles: LEGO McLaren F1 (3500 pts), Televisor 4K (500 pts), Smartphone (200 pts).
+  </Card>
+</CardGroup>

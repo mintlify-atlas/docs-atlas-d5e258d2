@@ -1,0 +1,96 @@
+---
+title: "Admin guide overview"
+description: "How the admin role works in BidCo, what admins can do, and how the session-based authentication flow is secured."
+---
+
+The admin role in BidCo has exclusive control over two platform-level operations: creating raffles and managing expert (Trabajador) accounts. Admins use a separate login flow from regular users and experts, backed by server-side session state rather than JWT tokens.
+
+<Warning>
+  Admin authentication is session-based. The server stores the authenticated state in `HttpSession`. If you expose the admin endpoints without HTTPS, an attacker who intercepts the session cookie gains full admin access. Always serve the application over HTTPS in production and configure `Secure` + `SameSite=Strict` on session cookies.
+</Warning>
+
+## Platform roles at a glance
+
+BidCo has three distinct roles. Each authenticates differently and has a different scope of permissions.
+
+| Role | Auth method | Token / session storage | Can do |
+|------|------------|------------------------|--------|
+| **User (Usuario)** | JWT via `POST /api/usuarios/login` | `localStorage` (`authToken`) | Bid, create auctions, enter raffles, manage profile |
+| **Expert (Trabajador)** | JWT via `POST /api/trabajadores/login` | `localStorage` (`authTokenExpert`) | Create and manage expert-associated content, post comments |
+| **Admin** | Session via `POST /api/admin/login` | Server-side `HttpSession`, `JSESSIONID` cookie | Create raffles, register expert accounts |
+
+Regular users and experts authenticate with JWT. The admin uses a completely separate mechanism — the backend stores admin identity in the server session, and the browser sends the `JSESSIONID` cookie on every subsequent request.
+
+## What admins can do
+
+<CardGroup cols={2}>
+  <Card title="Create raffles" icon="ticket">
+    Post new raffles with a title, description, category, date range, required points cost, and an optional product image. Raffles are immediately live for users to enter once created.
+  </Card>
+  <Card title="Manage expert accounts" icon="users">
+    Register new Trabajador accounts and update existing ones. Expert accounts have the `experto: true` flag and can log in separately from regular users.
+  </Card>
+</CardGroup>
+
+## Admin authentication flow
+
+The admin login is handled by `POST /api/admin/login`. On success, Spring sets an `HttpSession` attribute that the backend checks on every protected admin endpoint. The Angular frontend sends requests with `withCredentials: true` so the browser includes the `JSESSIONID` cookie automatically.
+
+```http
+POST /api/admin/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "your-password",
+  "rol": false
+}
+```
+
+A `200 OK` with no body means the session is established. Any subsequent request to `/api/admin/*` will be authenticated as long as the session is valid.
+
+On the Angular side, the `AdminLoginComponent` calls `AdminService.loginAdmin()`, then sets the local role state to `'admin'` via `AuthService.setUserRole('admin')`. The `AdminGuard` reads this role value to protect all `/admin` routes.
+
+```typescript
+// auth flow in AdminLoginComponent
+this.adminSvc.loginAdmin({ username, password, rol: false })
+  .subscribe({
+    next: () => {
+      this.auth.setUserRole('admin');
+      this.router.navigateByUrl('/admin');
+    }
+  });
+```
+
+<Note>
+  The `rol` field in `AdminLoginDTO` is present in the DTO but the login logic is driven by `username` and `password`. Pass `false` for `rol` when authenticating as admin.
+</Note>
+
+## Admin dashboard UI routes
+
+All admin views are under the `/admin` path and protected by `AdminGuard`. Attempting to access them without an active admin role redirects to `/admin/login`.
+
+| Route | Component | Purpose |
+|-------|-----------|---------|
+| `/admin/login` | `AdminLoginComponent` | Admin login form |
+| `/admin` | `AdminDashboardComponent` | Main dashboard with navigation |
+| `/admin/sorteo` | `AdminSorteoComponent` | Raffle creation form |
+| `/admin/expertos` | `AdminExpertComponent` | Expert account registration form |
+
+The dashboard renders a `<router-outlet>` so the sorteo and expertos views load inside the dashboard shell. Three action buttons on the dashboard navigate between areas:
+
+- **Añadir Sorteo** — navigates to `/admin/sorteo`
+- **Registrar Expertos** — navigates to `/admin/expertos`
+- **Cerrar Sesión** — calls `AuthService.logout()` and returns to `/`
+
+## Session security checklist
+
+<Warning>
+  Review all of the following before deploying to production.
+</Warning>
+
+- Serve the application over HTTPS so the `JSESSIONID` cookie is never sent in plaintext.
+- Set `server.servlet.session.cookie.secure=true` and `server.servlet.session.cookie.same-site=strict` in your Spring Boot `application.properties`.
+- Configure a session timeout (`server.servlet.session.timeout=30m`) to limit the window for session hijacking.
+- Never commit admin credentials to source control. Use environment variables or a secrets manager.
+- The admin session is server-side only. Logging out on the Angular side (`AuthService.logout()`) clears local role state, but you should also call a backend `/api/admin/logout` endpoint to invalidate the `HttpSession` if you implement one.

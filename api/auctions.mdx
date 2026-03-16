@@ -1,0 +1,314 @@
+---
+title: "Auctions"
+description: "Full reference for all /api/subastas endpoints — create, retrieve, finalize, and filter auctions."
+---
+
+# Auctions
+
+Base path: `/api/subastas`
+
+BidCo supports two auction types:
+
+| Type | `subastaNormal` value | Description |
+|---|---|---|
+| Normal auction | `true` | Bids are visible to all participants |
+| Blind auction | `false` | Bid amounts are hidden from other participants |
+
+<Note>
+Creating an auction requires a `multipart/form-data` request — one part for the JSON data and one part for the image file.
+</Note>
+
+---
+
+## POST /api/subastas
+
+Create a new auction. Uses `multipart/form-data`.
+
+### Request parts
+
+<ParamField body="subasta" type="object" required>
+  JSON part (`SubastaCreateDTO`). Must be sent with `Content-Type: application/json`.
+  <Expandable title="subasta fields">
+    <ParamField body="fechaInicial" type="string" required>
+      Auction start date in `YYYY-MM-DD` format.
+    </ParamField>
+    <ParamField body="fechaFinal" type="string" required>
+      Auction end date in `YYYY-MM-DD` format.
+    </ParamField>
+    <ParamField body="precioInicial" type="number" required>
+      Starting price (decimal).
+    </ParamField>
+    <ParamField body="subastaNormal" type="boolean" required>
+      `true` for a normal (visible bids) auction; `false` for a blind auction.
+    </ParamField>
+    <ParamField body="nombreArticulo" type="string" required>
+      Name of the auctioned item.
+    </ParamField>
+    <ParamField body="descripcion" type="string" required>
+      Item description.
+    </ParamField>
+    <ParamField body="creadorId" type="integer" required>
+      `usuarioID` of the user creating the auction.
+    </ParamField>
+    <ParamField body="categoria" type="string" required>
+      Item category (used for filtering).
+    </ParamField>
+    <ParamField body="ganador" type="integer">
+      Winner's `usuarioID`. Null until the auction is finalized.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="imagen" type="file" required>
+  Image file for the auction item.
+</ParamField>
+
+### Response `200 OK`
+
+<ResponseField name="subastaID" type="integer">
+  Auto-generated auction ID.
+</ResponseField>
+
+<ResponseField name="fechaInicial" type="string">
+  Start date (`YYYY-MM-DD`).
+</ResponseField>
+
+<ResponseField name="fechaFinal" type="string">
+  End date (`YYYY-MM-DD`).
+</ResponseField>
+
+<ResponseField name="precioInicial" type="number">
+  Starting price.
+</ResponseField>
+
+<ResponseField name="precioFinal" type="number">
+  Final price (null until finalized).
+</ResponseField>
+
+<ResponseField name="subastaNormal" type="boolean">
+  Auction type flag.
+</ResponseField>
+
+<ResponseField name="nombreArticulo" type="string">
+  Item name.
+</ResponseField>
+
+<ResponseField name="descripcion" type="string">
+  Item description.
+</ResponseField>
+
+<ResponseField name="creadorId" type="integer">
+  Creator's user ID.
+</ResponseField>
+
+<ResponseField name="imagen" type="string">
+  URL or path to the uploaded image.
+</ResponseField>
+
+<ResponseField name="categoria" type="string">
+  Item category.
+</ResponseField>
+
+<ResponseField name="ganador" type="integer">
+  Winner's user ID (null until finalized).
+</ResponseField>
+
+```bash
+curl -X POST http://localhost:8080/api/subastas \
+  -H "Authorization: Bearer <token>" \
+  -F 'subasta={"fechaInicial":"2026-04-01","fechaFinal":"2026-04-15","precioInicial":50.00,"subastaNormal":true,"nombreArticulo":"Vintage Watch","descripcion":"A rare 1970s timepiece.","creadorId":1,"categoria":"Collectibles"};type=application/json' \
+  -F 'imagen=@watch.jpg'
+```
+
+---
+
+## GET /api/subastas/{id}
+
+Retrieve a single auction by ID.
+
+### Path parameters
+
+<ParamField path="id" type="integer" required>
+  The auction's `subastaID`.
+</ParamField>
+
+### Response `200 OK`
+
+Returns a `SubastaResponseDTO`. See field descriptions above.
+
+```bash
+curl http://localhost:8080/api/subastas/10
+```
+
+---
+
+## PUT /api/subastas/final/{id}
+
+Finalize an auction — assigns the winner and sets the final price based on the highest bid.
+
+### Path parameters
+
+<ParamField path="id" type="integer" required>
+  The auction's `subastaID`.
+</ParamField>
+
+### Response `200 OK`
+
+Empty body on success.
+
+<Warning>
+This operation is irreversible. Once finalized, the winning bid is locked and the winner's account is charged.
+</Warning>
+
+```bash
+curl -X PUT http://localhost:8080/api/subastas/final/10 \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+## GET /api/subastas/filtrar
+
+List all auctions of a specific type.
+
+### Query parameters
+
+<ParamField query="normal" type="boolean" required>
+  `true` to list normal auctions; `false` to list blind auctions.
+</ParamField>
+
+### Response `200 OK`
+
+Returns an array of `SubastaResponseDTO`.
+
+```bash
+curl "http://localhost:8080/api/subastas/filtrar?normal=true"
+```
+
+---
+
+## GET /api/subastas/filtrar-creador
+
+List all auctions created by a specific user.
+
+### Query parameters
+
+<ParamField query="id" type="integer" required>
+  The creator's `usuarioID`.
+</ParamField>
+
+### Response `200 OK`
+
+Returns an array of `SubastaResponseDTO`.
+
+```bash
+curl "http://localhost:8080/api/subastas/filtrar-creador?id=1"
+```
+
+---
+
+## GET /api/subastas/filtro-normal
+
+Filter normal (visible-bid) auctions using `FiltroDTO` query parameters.
+
+### Query parameters
+
+<ParamField query="minPrice" type="integer">
+  Minimum starting price filter.
+</ParamField>
+
+<ParamField query="maxPrice" type="integer">
+  Maximum starting price filter.
+</ParamField>
+
+<ParamField query="categorias" type="string">
+  Comma-separated category names.
+</ParamField>
+
+<ParamField query="dateOrder" type="string">
+  Sort order: `asc` or `desc`.
+</ParamField>
+
+### Response `200 OK`
+
+Returns a filtered array of `SubastaResponseDTO`.
+
+```bash
+curl "http://localhost:8080/api/subastas/filtro-normal?minPrice=10&maxPrice=500&categorias=Art&dateOrder=desc"
+```
+
+---
+
+## GET /api/subastas/filtro-ciega
+
+Filter blind auctions using `FiltroDTO` query parameters. Same parameters as `filtro-normal`.
+
+```bash
+curl "http://localhost:8080/api/subastas/filtro-ciega?minPrice=0&maxPrice=1000&dateOrder=asc"
+```
+
+---
+
+## GET /api/subastas/filtro-mis-subastas
+
+Filter auctions created by a specific user.
+
+### Query parameters
+
+Accepts all `FiltroDTO` fields plus:
+
+<ParamField query="id" type="integer" required>
+  The `usuarioID` of the auction creator.
+</ParamField>
+
+### Response `200 OK`
+
+Returns a filtered array of `SubastaResponseDTO`.
+
+```bash
+curl "http://localhost:8080/api/subastas/filtro-mis-subastas?id=1&dateOrder=desc"
+```
+
+---
+
+## GET /api/subastas/filtro-mis-pujas
+
+Filter auctions in which a specific user has placed at least one bid.
+
+### Query parameters
+
+Accepts all `FiltroDTO` fields plus:
+
+<ParamField query="id" type="integer" required>
+  The `usuarioID` of the bidder.
+</ParamField>
+
+### Response `200 OK`
+
+Returns a filtered array of `SubastaResponseDTO`.
+
+```bash
+curl "http://localhost:8080/api/subastas/filtro-mis-pujas?id=1&minPrice=50"
+```
+
+---
+
+## GET /api/subastas/filtro-nombre
+
+Search auctions by name with additional `FiltroDTO` filters applied.
+
+### Query parameters
+
+Accepts all `FiltroDTO` fields plus:
+
+<ParamField query="searchTerm" type="string" required>
+  Partial or full item name to search for.
+</ParamField>
+
+### Response `200 OK`
+
+Returns a filtered array of `SubastaResponseDTO`.
+
+```bash
+curl "http://localhost:8080/api/subastas/filtro-nombre?searchTerm=watch&dateOrder=asc"
+```

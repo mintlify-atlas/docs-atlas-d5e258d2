@@ -1,0 +1,203 @@
+---
+title: "Managing experts"
+description: "How admins create and manage Trabajador (expert) accounts in BidCo, including the API endpoints, field reference, and expert login flow."
+---
+
+Experts (Trabajadores) are a distinct account type in BidCo. They are created by admins and can log in independently of regular users to manage platform content. This guide covers creating expert accounts, updating them, and how expert authentication works.
+
+## What experts can do
+
+<CardGroup cols={2}>
+  <Card title="Create raffles" icon="ticket">
+    Experts with `experto: true` can create raffles in the user-facing flow and are recorded as the `creador` on the sorteo entity.
+  </Card>
+  <Card title="Post comments" icon="message-square">
+    Experts are associated with `Comentario` records, allowing them to annotate auctions and raffles with expert commentary.
+  </Card>
+  <Card title="Separate login" icon="log-in">
+    Experts authenticate at `POST /api/trabajadores/login` and receive a JWT, keeping their session independent from regular users.
+  </Card>
+  <Card title="Profile lookup" icon="user-search">
+    Expert profiles can be looked up by ID or by `nombreUsuario` via the `GET /api/trabajadores` endpoints.
+  </Card>
+</CardGroup>
+
+## Expert account model
+
+The `Trabajador` entity has the following fields:
+
+| Field | Column | Type | Constraints |
+|-------|--------|------|-------------|
+| `trabajadorID` | `trabajador_id` | `Long` | Primary key, auto-generated |
+| `nombreUsuario` | `nombre_usuario` | `String` | Not null, unique |
+| `correoElectronico` | `correo_electronico` | `String` | Not null, unique |
+| `contraseña` | `contraseña` | `String` | Not null, stored hashed |
+| `experto` | `rol_trabajador` | `boolean` | `true` for experts |
+
+A Trabajador also has one-to-many relationships with `Comentario` and `Sorteo` (as `creador`).
+
+## Creating an expert account
+
+### Via the admin panel
+
+<Steps>
+  <Step title="Log in to the admin dashboard">
+    Navigate to `/admin/login` and authenticate. You are redirected to `/admin`.
+  </Step>
+
+  <Step title="Open the expert registration form">
+    Click **Registrar Expertos** on the dashboard. This navigates to `/admin/expertos`, which renders `AdminExpertComponent`.
+  </Step>
+
+  <Step title="Fill in the expert details">
+    Complete the registration form:
+
+    | Field | Description |
+    |-------|-------------|
+    | **Nombre de usuario** | Unique username for the expert (3–100 characters) |
+    | **Correo electrónico** | Valid, unique email address |
+    | **Contraseña** | Password (6–100 characters) |
+
+    The form always submits with `experto: true`, so every account created through this panel is an expert-role Trabajador.
+  </Step>
+
+  <Step title="Submit the form">
+    Click the submit button. `AdminService.createExpert()` sends a `POST` request to `/api/trabajadores`. On success the form resets and displays a confirmation message.
+  </Step>
+</Steps>
+
+### Via the API directly
+
+```http
+POST /api/trabajadores
+Content-Type: application/json
+
+{
+  "nombreUsuario": "expert-jane",
+  "correoElectronico": "jane@example.com",
+  "contrasena": "securepass123",
+  "experto": true
+}
+```
+
+<Note>
+  The password field is serialized as `contrasena` (without the special character) in JSON, mapped via `@JsonProperty("contrasena")` in `TrabajadorCreateDTO`. Use `contrasena` in your JSON payload, not `contraseña`.
+</Note>
+
+A successful response returns a `TrabajadorResponseDTO`:
+
+```json
+{
+  "trabajadorID": 7,
+  "nombreUsuario": "expert-jane",
+  "correoElectronico": "jane@example.com"
+}
+```
+
+The response intentionally omits the password hash.
+
+### TrabajadorCreateDTO field reference
+
+| JSON field | Validation | Notes |
+|------------|-----------|-------|
+| `nombreUsuario` | `@NotNull`, 3–100 chars | Must be unique across all Trabajadores |
+| `correoElectronico` | `@NotNull`, `@Email` | Must be a valid email, unique |
+| `contrasena` | `@NotNull`, 6–100 chars | Mapped from `contraseña` via `@JsonProperty` |
+| `experto` | none | `true` to create an expert account, `false` for a non-expert Trabajador |
+
+## Updating an expert account
+
+To update an existing expert's details, send the same `TrabajadorCreateDTO` structure to the update endpoint:
+
+```http
+PUT /api/trabajadores
+Content-Type: application/json
+
+{
+  "nombreUsuario": "expert-jane",
+  "correoElectronico": "jane-updated@example.com",
+  "contrasena": "newpassword456",
+  "experto": true
+}
+```
+
+The service locates the record by `nombreUsuario` and applies the new values.
+
+## Looking up expert accounts
+
+### By ID
+
+```http
+GET /api/trabajadores/{id}
+```
+
+### By username
+
+```http
+GET /api/trabajadores/buscar?nombreUsuario=expert-jane
+```
+
+Both endpoints return a `TrabajadorResponseDTO` with `trabajadorID`, `nombreUsuario`, and `correoElectronico`.
+
+## Expert login flow
+
+Experts authenticate separately from regular users using a JWT-based flow.
+
+### Login request
+
+```http
+POST /api/trabajadores/login
+Content-Type: application/json
+
+{
+  "identificador": "expert-jane",
+  "contraseña": "securepass123",
+  "rol": false
+}
+```
+
+The `identificador` field accepts either the expert's `nombreUsuario` or their `correoElectronico`. The response is a JWT:
+
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+### How `AuthExpertService` handles the token
+
+On the Angular side, `AuthExpertService` manages the expert session:
+
+1. `loginExpert()` sends the credentials to `POST /api/trabajadores/login` and returns the token observable.
+2. The component calls `setExpertFromToken(token)`, which stores the token in `localStorage` under `authTokenExpert`, decodes the JWT subject to get the expert's ID, and then fetches the full profile via `GET /api/trabajadores/{id}`.
+3. The profile is stored in `localStorage` under `authExpert` and exposed as `currentUser$` (a `BehaviorSubject<ExpertoResponse | null>`).
+4. On subsequent page loads, the constructor checks `localStorage` for an existing token and profile and restores the session state automatically.
+
+```typescript
+// Expert login in a component
+this.authExpert.loginExpert({
+  identificador: this.form.identificador,
+  contraseña: this.form.contraseña,
+  rol: false
+}).subscribe(({ token }) => {
+  this.authExpert.setExpertFromToken(token);
+});
+```
+
+### Logout
+
+Calling `AuthExpertService.logout()` clears both `authTokenExpert` and `authExpert` from `localStorage` and resets all `BehaviorSubject` values to their logged-out defaults. There is no server-side token invalidation — the JWT is stateless and expires according to its `exp` claim.
+
+<Tip>
+  Expert tokens are stored in `localStorage`, not in cookies. This makes them immune to CSRF but potentially accessible to XSS. Follow standard Angular security practices (strict Content Security Policy, avoid `innerHTML` with untrusted data) to reduce XSS risk.
+</Tip>
+
+## TrabajadorController endpoint summary
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/trabajadores` | Register a new Trabajador |
+| `PUT` | `/api/trabajadores` | Update an existing Trabajador |
+| `GET` | `/api/trabajadores/{id}` | Look up a Trabajador by ID |
+| `GET` | `/api/trabajadores/buscar?nombreUsuario=` | Look up a Trabajador by username |
+| `POST` | `/api/trabajadores/login` | Authenticate and receive a JWT |

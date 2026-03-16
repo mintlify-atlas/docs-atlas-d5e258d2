@@ -1,0 +1,151 @@
+---
+title: "Blind auctions"
+description: "Participate in sealed-bid auctions where bids remain hidden from other participants until the auction closes."
+---
+
+A blind auction is a sealed-bid event. Participants submit their bids without seeing what others have offered. The highest bid wins, but no one knows the competing amounts until after finalization.
+
+Blind auctions use the same `Subasta` model as normal auctions, distinguished by `subastaNormal: false`.
+
+## How blind auctions differ from normal auctions
+
+<CardGroup cols={2}>
+  <Card title="Normal auction" icon="eye">
+    All bids are publicly visible. Participants can see the current highest bid and outbid each other incrementally.
+  </Card>
+  <Card title="Blind auction" icon="eye-slash">
+    Bids are hidden. Each participant submits one sealed offer. The winner is the participant with the highest bid at close.
+  </Card>
+</CardGroup>
+
+From a data model perspective the only difference is the `subastaNormal` flag. The bid storage (`Puja`), finalization flow, and filtering are identical — only the frontend rendering and the dedicated filter endpoint differ.
+
+## Auction lifecycle
+
+<Steps>
+  <Step title="Created">
+    An authenticated user creates the auction with `subastaNormal: false`. The auction appears on the blind auction listing. `precioFinal` starts at `precioInicial`.
+  </Step>
+  <Step title="Bidding open">
+    Authenticated users submit bids via `POST /api/pujas`. Because the auction is blind, the UI does not show other participants' bids or the current highest amount.
+  </Step>
+  <Step title="Finalized">
+    At close, `PUT /api/subastas/final/{id}` assigns `ganador` to the user with the highest `importe` and sets `precioFinal` accordingly.
+  </Step>
+</Steps>
+
+<Note>
+  Bid concealment is enforced at the UI layer. The underlying `Puja` records exist in the database and are accessible via `GET /api/pujas/{id}` — ensure your access control policies restrict who can query individual bids for blind auctions.
+</Note>
+
+## Browsing blind auctions
+
+Load all blind auctions:
+
+```http
+GET /api/subastas/filtrar?normal=false
+```
+
+Example response:
+
+```json
+[
+  {
+    "subastaID": 7,
+    "nombreArticulo": "DSLR Camera",
+    "descripcion": "High-resolution DSLR with 18-55mm kit lens.",
+    "precioInicial": 70.00,
+    "precioFinal": 70.00,
+    "fechaInicial": "2026-03-10",
+    "fechaFinal": "2026-03-20",
+    "subastaNormal": false,
+    "categoria": "Electronics",
+    "creadorId": 5,
+    "imagen": "/uploads/camera.jpg",
+    "ganador": null
+  }
+]
+```
+
+## Filtering
+
+Blind auctions have their own filter endpoint, separate from the normal auction filter:
+
+```http
+GET /api/subastas/filtro-ciega?minPrice=0&maxPrice=300&categorias=Electronics&dateOrder=DESC
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `minPrice` | `int` | Minimum price (applied to `precioFinal`) |
+| `maxPrice` | `int` | Maximum price |
+| `categorias` | `string[]` | One or more category names |
+| `dateOrder` | `string` | Sort by end date: `ASC` or `DESC` |
+
+The frontend's `BlindAuctionComponent` calls `getSubastasFiltradasCiega(filtro)` which maps to this endpoint.
+
+## Creating a blind auction
+
+The creation flow is identical to a normal auction, with `subastaNormal` set to `false`:
+
+```http
+POST /api/subastas
+Content-Type: multipart/form-data
+```
+
+`subasta` part — `SubastaCreateDTO`:
+
+```json
+{
+  "nombreArticulo": "DSLR Camera",
+  "descripcion": "High-resolution DSLR with 18-55mm kit lens.",
+  "precioInicial": 70.00,
+  "fechaInicial": "2026-03-10",
+  "fechaFinal": "2026-03-20",
+  "subastaNormal": false,
+  "categoria": "Electronics",
+  "creadorId": 5
+}
+```
+
+Attach the product image as the `imagen` multipart part.
+
+### Required fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `nombreArticulo` | `string` | Item title |
+| `descripcion` | `string` | Detailed description |
+| `precioInicial` | `decimal` | Starting/reserve price |
+| `fechaInicial` | `date` | Auction start date (`YYYY-MM-DD`) |
+| `fechaFinal` | `date` | Auction end date (`YYYY-MM-DD`) |
+| `subastaNormal` | `boolean` | Must be `false` for a blind auction |
+| `categoria` | `string` | Item category |
+| `creadorId` | `long` | ID of the creating user |
+
+## Finalizing a blind auction
+
+```http
+PUT /api/subastas/final/{id}
+```
+
+No request body required. The backend executes `asignarGanadorYActualizarPrecioFinal`:
+
+1. Queries all `Puja` records for this `subastaId`.
+2. Identifies the record with the highest `importe`.
+3. Sets `Subasta.ganador` to that bidder's user ID.
+4. Updates `Subasta.precioFinal` to the winning `importe`.
+
+After finalization the winning bid amount becomes visible in `precioFinal` on the response.
+
+<Warning>
+  Only call this endpoint after the auction's `fechaFinal` has passed. Triggering it early reveals the current highest bid by updating `precioFinal`.
+</Warning>
+
+## Fetching a single blind auction
+
+```http
+GET /api/subastas/{id}
+```
+
+Returns the `SubastaResponseDTO`. While the auction is active, `ganador` is `null`. After finalization, `ganador` holds the winning user's ID and `precioFinal` reflects the final sale price.

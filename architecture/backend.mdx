@@ -1,0 +1,236 @@
+---
+title: Backend architecture
+description: Spring Boot 3 project structure, layered architecture, DTO pattern, MapStruct mapping, JWT token handling, and CORS configuration for the BidCo API.
+---
+
+The BidCo backend is a Spring Boot 3.4 REST API written in Java 17. It follows a strict layered architecture and uses JPA/Hibernate for persistence, MapStruct for object mapping, and JJWT for token-based authentication.
+
+## Project structure
+
+```
+com.bidco.api_rest/
+├── controller/          # REST controllers — HTTP entry points
+│   ├── AdminController.java
+│   ├── ComentarioController.java
+│   ├── PujaController.java
+│   ├── PujaSorteoController.java
+│   ├── SorteoController.java
+│   ├── SubastaController.java
+│   ├── TrabajadorController.java
+│   └── UsuarioController.java
+├── service/
+│   ├── contract/        # Service interfaces
+│   └── impl/            # Service implementations
+│       ├── AdminServiceImpl.java
+│       ├── ComentarioServiceImpl.java
+│       ├── PujaServiceImpl.java
+│       ├── PujaSorteoServiceImpl.java
+│       ├── SorteoServiceImpl.java
+│       ├── SubastaServiceImpl.java
+│       ├── TrabajadorServiceImpl.java
+│       └── UsuarioServiceImpl.java
+├── repository/          # Spring Data JPA repositories
+│   ├── ComentarioRepository.java
+│   ├── PujaRepository.java
+│   ├── PujaSorteoRepository.java
+│   ├── SorteoRepository.java
+│   ├── SubastaRepository.java
+│   ├── TrabajadorRepository.java
+│   └── UsuarioRepository.java
+├── model/               # JPA entity classes
+│   ├── Subasta.java
+│   ├── Sorteo.java
+│   ├── Puja.java
+│   ├── PujaSorteo.java
+│   ├── Usuario.java
+│   ├── Trabajador.java
+│   └── Comentario.java
+├── dto/                 # Data Transfer Objects
+│   ├── subasta/
+│   ├── sorteo/
+│   ├── puja/
+│   ├── pujasorteo/
+│   ├── cometario/
+│   ├── usuario/
+│   ├── trabajador/
+│   └── admin/
+├── mapper/              # MapStruct mappers
+│   ├── ComentarioMapper.java
+│   ├── PujaMapper.java
+│   ├── PujaSorteoMapper.java
+│   ├── SorteoMapper.java
+│   ├── SubastaMapper.java
+│   ├── TrabajadorMapper.java
+│   └── UsuarioMapper.java
+├── config/              # Configuration beans
+│   ├── CorsConfig.java
+│   └── JwtUtil.java
+└── exception/           # Custom exception classes
+```
+
+## Layered architecture
+
+Requests flow through four layers. Each layer is only allowed to call the layer directly below it.
+
+| Layer | Classes | Responsibility |
+|-------|---------|----------------|
+| **Controller** | `*Controller.java` | Receive HTTP requests, validate input, delegate to service, return HTTP responses |
+| **Service** | `*ServiceImpl.java` | Execute business logic, orchestrate repository calls, apply rules |
+| **Repository** | `*Repository.java` | Spring Data JPA interfaces; generate SQL queries from method names or JPQL |
+| **Model** | `*` entities | JPA-annotated POJOs mapped to database tables |
+
+DTOs and Mappers are cross-cutting utilities used between the Controller and Service layers to avoid exposing entity objects directly over the API.
+
+## DTO pattern
+
+BidCo separates input and output representations using dedicated DTO classes organized by resource under `dto/`.
+
+<Tabs>
+  <Tab title="Create DTOs">
+    Create DTOs carry the data sent by the client in `POST` or `PUT` request bodies. They are validated with Jakarta Bean Validation annotations before reaching the service layer.
+
+    Example pattern:
+    ```java
+    // dto/subasta/SubastaCreateDTO.java
+    public class SubastaCreateDTO {
+        private String nombreArticulo;
+        private String descripcion;
+        private BigDecimal precioInicial;
+        private LocalDate fechaInicial;
+        private LocalDate fechaFinal;
+        private boolean subastaNormal;
+        private String categoria;
+        private Long creadorId;
+    }
+    ```
+  </Tab>
+  <Tab title="Response DTOs">
+    Response DTOs shape the JSON returned to the client. They exclude sensitive fields (e.g., passwords) and can flatten or rename entity fields for the frontend's needs.
+
+    Example pattern:
+    ```java
+    // dto/subasta/SubastaResponseDTO.java
+    public class SubastaResponseDTO {
+        private Long subastaID;
+        private String nombreArticulo;
+        private BigDecimal precioFinal;
+        private String categoria;
+        private boolean subastaNormal;
+    }
+    ```
+
+    This matches the interface declared in the Angular `SubastaService`:
+    ```typescript
+    export interface SubastaResponseDTO {
+        subastaID: number;
+        nombreArticulo: string;
+        precioFinal: string;
+        categoria: string;
+        subastaNormal: boolean;
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## MapStruct mapping
+
+BidCo uses [MapStruct 1.5](https://mapstruct.org/) to generate type-safe, compile-time mapping code between entities and DTOs. Mapper interfaces are annotated with `@Mapper` and processed by the `mapstruct-processor` annotation processor configured in `pom.xml`:
+
+```xml pom.xml (annotation processor)
+<annotationProcessorPaths>
+    <path>
+        <groupId>org.mapstruct</groupId>
+        <artifactId>mapstruct-processor</artifactId>
+        <version>1.5.5.Final</version>
+    </path>
+</annotationProcessorPaths>
+```
+
+Each resource has a corresponding mapper. For example, `SubastaMapper` converts between `Subasta` entities and `SubastaResponseDTO` / `SubastaCreateDTO` objects. The generated implementations are injected by Spring as beans.
+
+## JWT token handling
+
+JWT tokens are generated and validated by `JwtUtil`. The class is not annotated as a Spring bean; it is instantiated directly by the services that need it.
+
+```java JwtUtil.java
+public class JwtUtil {
+
+    private String secret = "TuSecretoMuySeguroQueDebeTenerUnTamañoAdecuadoParaHS512_64bytesMinimo!!!";
+    private long expirationMillis = 86400000; // 24 hours
+
+    private Key getSigningKey() {
+        return Keys.hmacShaKeyFor(secret.getBytes());
+    }
+
+    public String generateToken(String subject) {
+        return Jwts.builder()
+                .setSubject(subject)
+                .setIssuedAt(new Date())
+                .setExpiration(new Date(System.currentTimeMillis() + expirationMillis))
+                .signWith(getSigningKey(), SignatureAlgorithm.HS512)
+                .compact();
+    }
+
+    public Claims getClaims(String token) {
+        return Jwts.parserBuilder()
+                .setSigningKey(getSigningKey())
+                .build()
+                .parseClaimsJws(token)
+                .getBody();
+    }
+}
+```
+
+| Method | Description |
+|--------|-------------|
+| `generateToken(subject)` | Builds a signed JWT with the given subject (user ID as string), issued at the current time, expiring in 24 hours. Signed with HS512. |
+| `getClaims(token)` | Parses and validates the token signature. Returns a `Claims` object from which the subject and expiry can be read. Throws if the token is invalid or expired. |
+
+<Note>
+  The `secret` string is currently hardcoded in `JwtUtil.java`. In production, this value should be injected from an environment variable using `@Value("${jwt.secret}")`.
+</Note>
+
+## CORS configuration
+
+Cross-origin resource sharing is configured globally in `CorsConfig.java`:
+
+```java CorsConfig.java
+@Configuration
+public class CorsConfig implements WebMvcConfigurer {
+
+    @Override
+    public void addCorsMappings(CorsRegistry registry) {
+        registry.addMapping("/**")
+                .allowedOrigins("http://localhost:4200")
+                .allowedMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
+                .allowedHeaders("*")
+                .allowCredentials(true);
+    }
+
+    @Override
+    public void addResourceHandlers(ResourceHandlerRegistry registry) {
+        registry.addResourceHandler("/uploads/**")
+                .addResourceLocations("file:uploads/");
+    }
+}
+```
+
+- All API paths (`/**`) accept requests from `http://localhost:4200`.
+- All standard HTTP methods plus `PATCH` and `OPTIONS` are allowed.
+- All request headers are permitted.
+- Credentials (cookies, `Authorization` header) are allowed.
+- The `/uploads/**` handler serves uploaded images from a local `uploads/` directory on the filesystem.
+
+## Key dependencies
+
+| Dependency | Version | Purpose |
+|------------|---------|--------|
+| `spring-boot-starter-web` | 3.4.4 | REST controllers, embedded Tomcat |
+| `spring-boot-starter-data-jpa` | 3.4.4 | JPA/Hibernate ORM, Spring Data repositories |
+| `mysql-connector-j` | — | JDBC driver (runtime); PostgreSQL driver to be added for Aiven |
+| `mapstruct` | 1.5.5 | Compile-time DTO ↔ entity mapping |
+| `jjwt-api` | 0.11.5 | JWT builder/parser API |
+| `jjwt-impl` | 0.11.5 | JWT implementation (runtime) |
+| `jjwt-jackson` | 0.11.5 | JSON serialization for JWT claims (runtime) |
+| `jakarta.validation-api` | 3.0.2 | Bean Validation annotations |
+| Java | 17 | Language version |

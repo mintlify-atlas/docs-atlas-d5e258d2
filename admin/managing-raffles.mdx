@@ -1,0 +1,144 @@
+---
+title: "Managing raffles"
+description: "Step-by-step guide for admins to create and finalize raffles in BidCo, including API request shapes and the full raffle lifecycle."
+---
+
+Admins are the only role that can create raffles through the dedicated admin API. This guide walks through the creation form, the API request format, and how a raffle moves from creation to winner selection.
+
+## Before you start
+
+<Note>
+  You must be logged in as admin before making any raffle management requests. See the [Admin guide overview](/admin/overview) for the authentication flow. The backend validates the `HttpSession` on every request to `POST /api/admin/sorteos`.
+</Note>
+
+## Creating a raffle
+
+<Steps>
+  <Step title="Log in to the admin dashboard">
+    Navigate to `/admin/login` and enter your admin credentials. On success you are redirected to `/admin`, the main dashboard.
+  </Step>
+
+  <Step title="Open the raffle creation form">
+    Click **Añadir Sorteo** on the dashboard. You are taken to `/admin/sorteo`, which renders the `AdminSorteoComponent` form.
+  </Step>
+
+  <Step title="Fill in the raffle details">
+    Complete every required field in the form:
+
+    | Field | Type | Description |
+    |-------|------|-------------|
+    | **Nombre** | `string` | The article or prize name displayed to users (`nombreArticulo`) |
+    | **Descripción** | `string` | A description of the prize or raffle |
+    | **Inicio** | `date` | Start date in `YYYY-MM-DD` format (`fechaInicio`) |
+    | **Fin** | `date` | End date in `YYYY-MM-DD` format (`fechaFin`) |
+    | **Puntos** | `integer` | Number of points a user must spend per entry (`puntosNecesarios`) |
+    | **Categoría** | `enum` | One of: `tecnologia`, `hogar`, `moda`, `deportes`, `juguetes`, `otros` |
+    | **Imagen** | `file` | Optional product image (any browser-supported image format) |
+  </Step>
+
+  <Step title="Submit the form">
+    Click **Crear Sorteo**. The component calls `AdminService.createSorteo()`, which sends a `multipart/form-data` request to `POST /api/admin/sorteos`. A success message appears when the raffle is created.
+  </Step>
+</Steps>
+
+## API request format
+
+The raffle creation endpoint accepts a `multipart/form-data` request with two parts:
+
+- `sorteo` — a JSON blob with `Content-Type: application/json` containing the `SorteoCreateDTO` fields.
+- `imagen` — an optional image file.
+
+```http
+POST /api/admin/sorteos
+Content-Type: multipart/form-data
+Cookie: JSESSIONID=<your-session-id>
+
+--boundary
+Content-Disposition: form-data; name="sorteo"
+Content-Type: application/json
+
+{
+  "nombreArticulo": "Sony WH-1000XM5 Headphones",
+  "descripcion": "Premium noise-cancelling wireless headphones.",
+  "categoria": "tecnologia",
+  "fechaInicio": "2026-04-01",
+  "fechaFin": "2026-04-30",
+  "puntosNecesarios": 50
+}
+--boundary
+Content-Disposition: form-data; name="imagen"; filename="headphones.jpg"
+Content-Type: image/jpeg
+
+<binary data>
+--boundary--
+```
+
+A `200 OK` with an empty body confirms the raffle was created. The backend attaches the uploaded image to the sorteo record before persisting it.
+
+### SorteoCreateDTO field reference
+
+| JSON field | Java type | Required | Notes |
+|------------|-----------|----------|-------|
+| `nombreArticulo` | `String` | Yes | Prize or article name |
+| `descripcion` | `String` | Yes | Raffle description |
+| `categoria` | `String` | Yes | Category slug |
+| `fechaInicio` | `LocalDate` | Yes | Format `yyyy-MM-dd` |
+| `fechaFin` | `LocalDate` | Yes | Format `yyyy-MM-dd`, must be after `fechaInicio` |
+| `puntosNecesarios` | `Integer` | Yes | Points cost per entry |
+| `imagen` | `MultipartFile` | No | Sent as a separate multipart part, not in the JSON |
+
+<Tip>
+  The Angular `AdminService.createSorteo()` method builds the `FormData` automatically. It serializes the sorteo fields into a `Blob` with `type: 'application/json'` and appends the file separately. If you are calling the API directly (e.g., from a script or Postman), make sure the `sorteo` part has `Content-Type: application/json` set explicitly, or Spring will reject the request.
+</Tip>
+
+## Points system — admin view
+
+The `puntosNecesarios` field controls how many points a user spends each time they enter the raffle. From the admin's perspective:
+
+- Set a higher value to limit entries to users with substantial point balances, creating exclusivity.
+- Set a lower value to maximize participation.
+- Users accumulate points through platform activity (balance top-ups and other platform mechanisms). Admins do not directly manage user point balances through the admin panel.
+
+## Raffle lifecycle
+
+Once a raffle is created it follows a fixed lifecycle:
+
+```
+Created (admin) → Active (users enter) → Finalized (winner drawn)
+```
+
+<Steps>
+  <Step title="Created">
+    The admin submits the creation form. The raffle is stored with the configured start date, end date, points cost, and optional image. It is immediately visible to users in the raffle listing.
+  </Step>
+
+  <Step title="Active — users enter">
+    During the period between `fechaInicio` and `fechaFin`, users can spend their points to enter the raffle. Each entry costs `puntosNecesarios` points. Users enter via the frontend raffle detail view.
+  </Step>
+
+  <Step title="Finalized — winner drawn">
+    Once the raffle period ends, call the finalization endpoint to draw a winner and record the final price:
+
+    ```http
+    PUT /api/sorteos/final/{id}
+    ```
+
+    The backend calls `SorteoService.asignarGanadorYActualizarPrecioFinal(id)`, which selects a winner from all valid entries and returns the updated `SorteoResponseDTO` with the winner populated.
+
+    ```http
+    PUT /api/sorteos/final/42
+    200 OK
+
+    {
+      "id": 42,
+      "nombreArticulo": "Sony WH-1000XM5 Headphones",
+      "ganador": { ... },
+      ...
+    }
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+  The finalization endpoint (`PUT /api/sorteos/final/{id}`) is on the public `SorteoController`, not on the admin controller. It is not currently protected by session authentication. Ensure you add access control to this endpoint before deploying to a public environment.
+</Warning>

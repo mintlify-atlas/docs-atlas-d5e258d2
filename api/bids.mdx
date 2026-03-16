@@ -1,0 +1,146 @@
+---
+title: "Bids"
+description: "Full reference for all /api/pujas endpoints — place, retrieve, and query auction bids."
+---
+
+# Bids
+
+Base path: `/api/pujas`
+
+A bid (`Puja`) represents a single price offer placed by a user on an auction. Bids are tied to both a specific auction (`subastaID`) and the bidding user (`pujadorID`).
+
+---
+
+## POST /api/pujas
+
+Place a new bid on an auction.
+
+### Request body
+
+<ParamField body="importe" type="number" required>
+  Bid amount (decimal). Must be higher than the current highest bid for normal auctions.
+</ParamField>
+
+<ParamField body="fecha" type="string" required>
+  Date the bid is placed, in `YYYY-MM-DD` format.
+</ParamField>
+
+<ParamField body="subastaId" type="integer" required>
+  The `subastaID` of the auction being bid on.
+</ParamField>
+
+<ParamField body="pujadorId" type="integer" required>
+  The `usuarioID` of the user placing the bid.
+</ParamField>
+
+### Response `200 OK`
+
+<ResponseField name="pujaID" type="integer">
+  Auto-generated bid ID.
+</ResponseField>
+
+<ResponseField name="importe" type="number">
+  Bid amount.
+</ResponseField>
+
+<ResponseField name="fecha" type="string">
+  Bid date (`YYYY-MM-DD`).
+</ResponseField>
+
+<ResponseField name="ganadora" type="boolean">
+  Whether this is the current winning bid. Set to `false` at creation; updated when the auction is finalized.
+</ResponseField>
+
+<ResponseField name="subastaID" type="integer">
+  Associated auction ID.
+</ResponseField>
+
+<ResponseField name="pujadorID" type="integer">
+  Bidder's user ID.
+</ResponseField>
+
+```bash
+curl -X POST http://localhost:8080/api/pujas \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{
+    "importe": 120.00,
+    "fecha": "2026-04-10",
+    "subastaId": 10,
+    "pujadorId": 1
+  }'
+```
+
+---
+
+## GET /api/pujas/{id}
+
+Retrieve a single bid by its ID.
+
+### Path parameters
+
+<ParamField path="id" type="integer" required>
+  The bid's `pujaID`.
+</ParamField>
+
+### Response `200 OK`
+
+Returns a `PujaResponseDTO`. See field descriptions above.
+
+```bash
+curl http://localhost:8080/api/pujas/42 \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+## GET /api/pujas/mayor/{subastaId}
+
+Retrieve the current highest bid for a given auction.
+
+### Path parameters
+
+<ParamField path="subastaId" type="integer" required>
+  The `subastaID` of the auction.
+</ParamField>
+
+### Response `200 OK`
+
+Returns the `PujaResponseDTO` for the highest-value bid on that auction.
+
+<Note>
+For blind auctions, this endpoint may be restricted on the frontend to prevent revealing bid information before the auction closes.
+</Note>
+
+```bash
+curl http://localhost:8080/api/pujas/mayor/10 \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+## GET /api/pujas/subastas-usuario/{usuarioId}
+
+List all auctions on which a given user has placed at least one bid.
+
+### Path parameters
+
+<ParamField path="usuarioId" type="integer" required>
+  The `usuarioID` of the bidder.
+</ParamField>
+
+### Response `200 OK`
+
+Returns an array of `SubastaResponseDTO` objects representing the auctions the user has participated in.
+
+```bash
+curl http://localhost:8080/api/pujas/subastas-usuario/1 \
+  -H "Authorization: Bearer <token>"
+```
+
+### Error responses
+
+| Status | Reason |
+|---|---|
+| `400 Bad Request` | Bid amount invalid or auction rules violated |
+| `404 Not Found` | Auction or user not found |

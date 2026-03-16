@@ -1,0 +1,448 @@
+---
+title: "Users"
+description: "Full reference for all /api/usuarios endpoints — registration, profile, privacy, stats, and balance."
+---
+
+# Users
+
+Base path: `/api/usuarios`
+
+---
+
+## POST /api/usuarios
+
+Register a new user account.
+
+### Request body
+
+<ParamField body="nombreUsuario" type="string" required>
+  Username. Between 1 and 100 characters.
+</ParamField>
+
+<ParamField body="correoElectronico" type="string" required>
+  Valid email address.
+</ParamField>
+
+<ParamField body="contraseña" type="string" required>
+  Password. Between 6 and 100 characters.
+</ParamField>
+
+<ParamField body="saldo" type="number" required>
+  Initial account balance (decimal).
+</ParamField>
+
+<ParamField body="puntos" type="integer" required>
+  Initial points balance.
+</ParamField>
+
+<ParamField body="pais" type="string" required>
+  Country.
+</ParamField>
+
+<ParamField body="ciudad" type="string" required>
+  City.
+</ParamField>
+
+<ParamField body="codigoPostal" type="string" required>
+  Postal / ZIP code.
+</ParamField>
+
+<ParamField body="calle" type="string" required>
+  Street address.
+</ParamField>
+
+<ParamField body="numeroPiso" type="integer" required>
+  Floor number.
+</ParamField>
+
+<ParamField body="letraPiso" type="string">
+  Floor letter / apartment identifier (optional).
+</ParamField>
+
+### Response `200 OK`
+
+<ResponseField name="usuarioID" type="integer">
+  Auto-generated user ID.
+</ResponseField>
+
+<ResponseField name="nombreUsuario" type="string">
+  Username.
+</ResponseField>
+
+<ResponseField name="correoElectronico" type="string">
+  Email address.
+</ResponseField>
+
+<ResponseField name="pais" type="string">
+  Country.
+</ResponseField>
+
+<ResponseField name="ciudad" type="string">
+  City.
+</ResponseField>
+
+<ResponseField name="codigoPostal" type="string">
+  Postal code.
+</ResponseField>
+
+<ResponseField name="calle" type="string">
+  Street address.
+</ResponseField>
+
+<ResponseField name="numeroPiso" type="integer">
+  Floor number.
+</ResponseField>
+
+<ResponseField name="letraPiso" type="string">
+  Floor letter (nullable).
+</ResponseField>
+
+<ResponseField name="saldo" type="number">
+  Account balance.
+</ResponseField>
+
+<ResponseField name="puntos" type="integer">
+  Points balance.
+</ResponseField>
+
+```bash
+curl -X POST http://localhost:8080/api/usuarios \
+  -H "Content-Type: application/json" \
+  -d '{
+    "nombreUsuario": "alice",
+    "correoElectronico": "alice@example.com",
+    "contraseña": "secret123",
+    "saldo": 100.00,
+    "puntos": 0,
+    "pais": "Spain",
+    "ciudad": "Madrid",
+    "codigoPostal": "28001",
+    "calle": "Calle Mayor 1",
+    "numeroPiso": 3,
+    "letraPiso": "B"
+  }'
+```
+
+---
+
+## POST /api/usuarios/login
+
+Authenticate a user and receive a JWT token. See the [Authentication guide](/api/authentication) for full details.
+
+### Request body
+
+<ParamField body="identificador" type="string" required>
+  Username or email address. Between 1 and 100 characters.
+</ParamField>
+
+<ParamField body="contraseña" type="string" required>
+  Password. Between 6 and 100 characters.
+</ParamField>
+
+### Response `200 OK`
+
+<ResponseField name="token" type="string">
+  Signed HS512 JWT token, valid for 24 hours.
+</ResponseField>
+
+```bash
+curl -X POST http://localhost:8080/api/usuarios/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "identificador": "alice@example.com",
+    "contraseña": "secret123"
+  }'
+```
+
+---
+
+## GET /api/usuarios/{id}
+
+Fetch a single user by their numeric ID.
+
+### Path parameters
+
+<ParamField path="id" type="integer" required>
+  The user's `usuarioID`.
+</ParamField>
+
+### Response `200 OK`
+
+Returns a `UsuarioResponseDTO` object. See [POST /api/usuarios](#post-apiusuarios) for field descriptions.
+
+```bash
+curl http://localhost:8080/api/usuarios/1
+```
+
+---
+
+## GET /api/usuarios/buscar
+
+Fetch a user by their username.
+
+### Query parameters
+
+<ParamField query="nombreUsuario" type="string" required>
+  Exact username to look up.
+</ParamField>
+
+### Response `200 OK`
+
+Returns a `UsuarioResponseDTO` object.
+
+```bash
+curl "http://localhost:8080/api/usuarios/buscar?nombreUsuario=alice"
+```
+
+---
+
+## PUT /api/usuarios/{id}
+
+Update a user's profile. Password and country cannot be changed through this endpoint.
+
+### Path parameters
+
+<ParamField path="id" type="integer" required>
+  The user's `usuarioID`.
+</ParamField>
+
+### Request body
+
+<ParamField body="nombreUsuario" type="string" required>
+  New username. Between 1 and 100 characters.
+</ParamField>
+
+<ParamField body="correoElectronico" type="string" required>
+  New email address.
+</ParamField>
+
+<ParamField body="ciudad" type="string" required>
+  New city. Between 1 and 100 characters.
+</ParamField>
+
+<ParamField body="codigoPostal" type="string" required>
+  New postal code. Between 1 and 20 characters.
+</ParamField>
+
+<ParamField body="calle" type="string" required>
+  New street address. Between 1 and 255 characters.
+</ParamField>
+
+<ParamField body="numeroPiso" type="integer" required>
+  New floor number.
+</ParamField>
+
+<ParamField body="letraPiso" type="string">
+  New floor letter (optional).
+</ParamField>
+
+### Response `200 OK`
+
+Returns the updated `UsuarioResponseDTO`.
+
+```bash
+curl -X PUT http://localhost:8080/api/usuarios/1 \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{
+    "nombreUsuario": "alice_updated",
+    "correoElectronico": "alice_new@example.com",
+    "ciudad": "Barcelona",
+    "codigoPostal": "08001",
+    "calle": "Passeig de Gràcia 10",
+    "numeroPiso": 5,
+    "letraPiso": "A"
+  }'
+```
+
+---
+
+## PATCH /api/usuarios/{id}/password
+
+Change the user's password.
+
+### Path parameters
+
+<ParamField path="id" type="integer" required>
+  The user's `usuarioID`.
+</ParamField>
+
+### Request body
+
+<ParamField body="currentPassword" type="string" required>
+  The user's current password.
+</ParamField>
+
+<ParamField body="newPassword" type="string" required>
+  The desired new password.
+</ParamField>
+
+### Response `200 OK`
+
+Empty body on success.
+
+```bash
+curl -X PATCH http://localhost:8080/api/usuarios/1/password \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{
+    "currentPassword": "secret123",
+    "newPassword": "newSecret456"
+  }'
+```
+
+### Error responses
+
+| Status | Message |
+|---|---|
+| `400 Bad Request` | `{"message": "<reason>"}` — current password incorrect or new password invalid |
+| `404 Not Found` | `{"message": "Usuario no encontrado"}` |
+| `500 Internal Server Error` | `{"message": "Error interno"}` |
+
+---
+
+## GET /api/usuarios/{id}/privacidad
+
+Retrieve the user's privacy settings.
+
+### Path parameters
+
+<ParamField path="id" type="integer" required>
+  The user's `usuarioID`.
+</ParamField>
+
+### Response `200 OK`
+
+<ResponseField name="privacidadAnonimoPujas" type="boolean">
+  Whether the user's bids appear anonymously to others.
+</ResponseField>
+
+<ResponseField name="privacidadEstadisticas" type="boolean">
+  Whether the user's statistics are publicly visible.
+</ResponseField>
+
+<ResponseField name="privacidadPerfilVisible" type="boolean">
+  Whether the user's profile is publicly visible.
+</ResponseField>
+
+```bash
+curl http://localhost:8080/api/usuarios/1/privacidad \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+## PUT /api/usuarios/{id}/privacidad
+
+Update the user's privacy settings.
+
+### Path parameters
+
+<ParamField path="id" type="integer" required>
+  The user's `usuarioID`.
+</ParamField>
+
+### Request body
+
+<ParamField body="privacidadAnonimoPujas" type="boolean">
+  Set bid anonymity.
+</ParamField>
+
+<ParamField body="privacidadEstadisticas" type="boolean">
+  Set statistics visibility.
+</ParamField>
+
+<ParamField body="privacidadPerfilVisible" type="boolean">
+  Set profile visibility.
+</ParamField>
+
+### Response `200 OK`
+
+Returns the updated `UsuarioResponseDTO`.
+
+```bash
+curl -X PUT http://localhost:8080/api/usuarios/1/privacidad \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{
+    "privacidadAnonimoPujas": true,
+    "privacidadEstadisticas": false,
+    "privacidadPerfilVisible": true
+  }'
+```
+
+---
+
+## GET /api/usuarios/{id}/stats
+
+Retrieve activity statistics for a user.
+
+### Path parameters
+
+<ParamField path="id" type="integer" required>
+  The user's `usuarioID`.
+</ParamField>
+
+### Response `200 OK`
+
+<ResponseField name="participatedBids" type="integer">
+  Total number of auctions the user has placed at least one bid on.
+</ResponseField>
+
+<ResponseField name="wonBids" type="integer">
+  Total number of auctions the user has won.
+</ResponseField>
+
+<ResponseField name="createdBids" type="integer">
+  Total number of auctions created by the user.
+</ResponseField>
+
+<ResponseField name="participatedDraws" type="integer">
+  Total number of raffles the user has entered.
+</ResponseField>
+
+<ResponseField name="wonDraws" type="integer">
+  Total number of raffles the user has won.
+</ResponseField>
+
+<ResponseField name="createdDraws" type="integer">
+  Total number of raffles created by the user.
+</ResponseField>
+
+```bash
+curl http://localhost:8080/api/usuarios/1/stats \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+## PATCH /api/usuarios/{id}/recargar-saldo
+
+Top up the user's account balance.
+
+### Path parameters
+
+<ParamField path="id" type="integer" required>
+  The user's `usuarioID`.
+</ParamField>
+
+### Request body
+
+<ParamField body="cantidad" type="number" required>
+  Amount to add to the current balance (decimal).
+</ParamField>
+
+### Response `200 OK`
+
+Returns the new balance as a plain decimal number.
+
+```json
+250.00
+```
+
+```bash
+curl -X PATCH http://localhost:8080/api/usuarios/1/recargar-saldo \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{"cantidad": 50.00}'
+```

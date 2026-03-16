@@ -1,0 +1,250 @@
+---
+title: "Admin"
+description: "Full reference for /api/admin endpoints (session-based) and /api/trabajadores endpoints for managing expert workers."
+---
+
+# Admin
+
+The admin section covers two sets of endpoints:
+
+- **`/api/admin`** — Session-authenticated admin operations (create raffles, manage platform).
+- **`/api/trabajadores`** — Worker/expert account management.
+
+<Warning>
+All `/api/admin` endpoints require an active admin session. Call `POST /api/admin/login` first and persist the session cookie (`JSESSIONID`) in subsequent requests.
+</Warning>
+
+---
+
+## POST /api/admin/login
+
+Log in as an administrator. Sets a server-side session cookie on success.
+
+### Request body
+
+<ParamField body="username" type="string" required>
+  Admin username.
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  Admin password.
+</ParamField>
+
+<ParamField body="rol" type="boolean">
+  Role discriminator. `true` for admin role.
+</ParamField>
+
+### Response `200 OK`
+
+Empty body. The `Set-Cookie: JSESSIONID=...` header is included in the response — persist this cookie for subsequent admin requests.
+
+```bash
+curl -X POST http://localhost:8080/api/admin/login \
+  -H "Content-Type: application/json" \
+  -c cookies.txt \
+  -d '{
+    "username": "admin",
+    "password": "adminSecret",
+    "rol": true
+  }'
+```
+
+---
+
+## POST /api/admin/sorteos
+
+Create a new raffle as an admin. Uses `multipart/form-data`. Requires an active admin session.
+
+### Request parts
+
+<ParamField body="sorteo" type="object" required>
+  JSON part containing raffle details.
+  <Expandable title="sorteo fields">
+    <ParamField body="nombreArticulo" type="string" required>
+      Name of the prize item.
+    </ParamField>
+    <ParamField body="descripcion" type="string" required>
+      Description of the prize.
+    </ParamField>
+    <ParamField body="categoria" type="string" required>
+      Item category.
+    </ParamField>
+    <ParamField body="fechaInicio" type="string" required>
+      Raffle start date in `YYYY-MM-DD` format.
+    </ParamField>
+    <ParamField body="fechaFin" type="string" required>
+      Raffle end date in `YYYY-MM-DD` format.
+    </ParamField>
+    <ParamField body="puntosNecesarios" type="integer" required>
+      Points required per entry ticket.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="imagen" type="file">
+  Optional image file for the prize item.
+</ParamField>
+
+### Response `200 OK`
+
+Empty body on success.
+
+```bash
+curl -X POST http://localhost:8080/api/admin/sorteos \
+  -b cookies.txt \
+  -F 'sorteo={"nombreArticulo":"Smart TV","descripcion":"65-inch 4K TV","categoria":"Electronics","fechaInicio":"2026-06-01","fechaFin":"2026-06-30","puntosNecesarios":100};type=application/json' \
+  -F 'imagen=@tv.jpg'
+```
+
+<Note>
+The `imagen` part is optional. If omitted, the raffle will be created without an image.
+</Note>
+
+---
+
+## Worker (Expert) Endpoints — `/api/trabajadores`
+
+Workers are expert users who post valuations and comments on auctions. They authenticate via JWT (see [Authentication](/api/authentication)).
+
+---
+
+### POST /api/trabajadores
+
+Register a new expert worker account.
+
+#### Request body
+
+<ParamField body="nombreUsuario" type="string" required>
+  Worker's username. Between 3 and 100 characters.
+</ParamField>
+
+<ParamField body="correoElectronico" type="string" required>
+  Valid email address.
+</ParamField>
+
+<ParamField body="contrasena" type="string" required>
+  Password. Between 6 and 100 characters. JSON key is `contrasena` (no tilde).
+</ParamField>
+
+<ParamField body="experto" type="boolean">
+  Whether this worker has expert status. Defaults to `false`.
+</ParamField>
+
+#### Response `200 OK`
+
+<ResponseField name="trabajadorID" type="integer">
+  Auto-generated worker ID.
+</ResponseField>
+
+<ResponseField name="nombreUsuario" type="string">
+  Worker's username.
+</ResponseField>
+
+<ResponseField name="correoElectronico" type="string">
+  Worker's email address.
+</ResponseField>
+
+```bash
+curl -X POST http://localhost:8080/api/trabajadores \
+  -H "Content-Type: application/json" \
+  -d '{
+    "nombreUsuario": "expert_joe",
+    "correoElectronico": "joe@bidco.com",
+    "contrasena": "secure789",
+    "experto": true
+  }'
+```
+
+---
+
+### PUT /api/trabajadores
+
+Update an existing worker's details. Accepts the same body as `POST /api/trabajadores`.
+
+```bash
+curl -X PUT http://localhost:8080/api/trabajadores \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{
+    "nombreUsuario": "expert_joe_updated",
+    "correoElectronico": "joe_new@bidco.com",
+    "contrasena": "newPass123",
+    "experto": true
+  }'
+```
+
+---
+
+### GET /api/trabajadores/{id}
+
+Retrieve a worker by their ID.
+
+#### Path parameters
+
+<ParamField path="id" type="integer" required>
+  The worker's `trabajadorID`.
+</ParamField>
+
+#### Response `200 OK`
+
+Returns a `TrabajadorResponseDTO`.
+
+```bash
+curl http://localhost:8080/api/trabajadores/3
+```
+
+---
+
+### GET /api/trabajadores/buscar
+
+Look up a worker by username.
+
+#### Query parameters
+
+<ParamField query="nombreUsuario" type="string" required>
+  Exact username to search for.
+</ParamField>
+
+#### Response `200 OK`
+
+Returns a `TrabajadorResponseDTO`.
+
+```bash
+curl "http://localhost:8080/api/trabajadores/buscar?nombreUsuario=expert_joe"
+```
+
+---
+
+### POST /api/trabajadores/login
+
+Authenticate a worker and receive a JWT token.
+
+#### Request body
+
+<ParamField body="identificador" type="string" required>
+  Username or email address. Between 1 and 100 characters.
+</ParamField>
+
+<ParamField body="contraseña" type="string" required>
+  Password. Between 6 and 100 characters.
+</ParamField>
+
+<ParamField body="rol" type="boolean">
+  Role discriminator flag.
+</ParamField>
+
+#### Response `200 OK`
+
+<ResponseField name="token" type="string">
+  Signed HS512 JWT token, valid for 24 hours.
+</ResponseField>
+
+```bash
+curl -X POST http://localhost:8080/api/trabajadores/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "identificador": "expert_joe",
+    "contraseña": "secure789",
+    "rol": false
+  }'
+```

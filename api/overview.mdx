@@ -1,0 +1,119 @@
+---
+title: "API Overview"
+description: "Base URL, response format, error handling, and available endpoints for the BidCo REST API."
+---
+
+# API Overview
+
+The BidCo REST API is a JSON-based HTTP API built with Spring Boot 3. All request and response bodies use `application/json` unless otherwise noted (image upload endpoints use `multipart/form-data`).
+
+## Base URL
+
+<Tabs>
+  <Tab title="Local Development">
+    ```
+    http://localhost:8080
+    ```
+  </Tab>
+  <Tab title="Production (Render)">
+    ```
+    https://bidco-api.onrender.com
+    ```
+    <Note>Replace this URL with your actual Render deployment URL.</Note>
+  </Tab>
+</Tabs>
+
+## Response Format
+
+Successful responses return the resource object (or an array of resource objects) directly as the JSON body. There is no top-level wrapper envelope.
+
+```json
+// Single resource
+{
+  "usuarioID": 1,
+  "nombreUsuario": "alice",
+  "correoElectronico": "alice@example.com"
+}
+
+// Collection
+[
+  { "subastaID": 10, "nombreArticulo": "Vintage Watch", ... },
+  { "subastaID": 11, "nombreArticulo": "Signed Poster", ... }
+]
+```
+
+## Error Format
+
+All errors follow a consistent structure produced by `GlobalExceptionHandler`:
+
+```json
+{
+  "timestamp": "2026-03-16T10:30:00",
+  "status": 404,
+  "error": "Not Found",
+  "message": "Entity not found"
+}
+```
+
+Validation errors (`400`) include a field-level breakdown:
+
+```json
+{
+  "timestamp": "2026-03-16T10:30:00",
+  "status": 400,
+  "error": "Bad Request",
+  "message": "Error de validación en uno o más campos",
+  "errors": {
+    "correoElectronico": "El correo electrónico debe ser válido",
+    "nombreUsuario": "El nombre de usuario no puede ser nulo"
+  }
+}
+```
+
+| HTTP Status | Meaning |
+|---|---|
+| `200 OK` | Request succeeded |
+| `201 Created` | Resource created |
+| `400 Bad Request` | Validation error or illegal argument |
+| `404 Not Found` | Entity not found |
+| `500 Internal Server Error` | Unexpected server error |
+
+## Authentication
+
+Most write operations require a JWT bearer token. See the [Authentication guide](/api/authentication) for full details.
+
+```http
+Authorization: Bearer <token>
+```
+
+Admin endpoints use HTTP session-based authentication instead of JWT.
+
+## Filtering with FiltroDTO
+
+Several list endpoints accept `FiltroDTO` query parameters for server-side filtering:
+
+| Parameter | Type | Description |
+|---|---|---|
+| `minPrice` | `int` | Minimum price (inclusive) |
+| `maxPrice` | `int` | Maximum price (inclusive) |
+| `categorias` | `string[]` | Comma-separated list of category names |
+| `dateOrder` | `string` | Sort order by date — `asc` or `desc` |
+
+Example:
+
+```
+GET /api/subastas/filtro-normal?minPrice=10&maxPrice=500&categorias=Electronics,Art&dateOrder=desc
+```
+
+## Available Endpoints
+
+| Resource | Base Path | Reference |
+|---|---|---|
+| Users | `/api/usuarios` | [Users](/api/users) |
+| Auctions | `/api/subastas` | [Auctions](/api/auctions) |
+| Bids | `/api/pujas` | [Bids](/api/bids) |
+| Raffles | `/api/sorteos` | [Raffles](/api/raffles) |
+| Raffle Entries | `/api/pujas-sorteo` | [Raffle Entries](/api/raffle-entries) |
+| Comments | `/api/comentarios` | [Comments](/api/comments) |
+| Admin | `/api/admin` | [Admin](/api/admin) |
+| Workers (Experts) | `/api/trabajadores` | Covered in [Admin](/api/admin) |

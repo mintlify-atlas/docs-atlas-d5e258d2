@@ -1,0 +1,79 @@
+---
+title: "Introduction"
+description: "BidCo is a full-stack web platform for managing normal and blind auctions, as well as raffles, built with Angular, Spring Boot, and PostgreSQL."
+---
+
+## What is BidCo?
+
+BidCo is a complete auction and raffle management platform designed for real-world bidding scenarios. Whether you're running an open auction where all bids are visible, a blind auction where bids remain secret until the end, or a points-based raffle, BidCo provides the full infrastructure to manage it end-to-end.
+
+The platform is built with a clean client-server architecture:
+- **Frontend**: Angular 19+ with standalone components, deployed on Vercel
+- **Backend**: Java Spring Boot 3 REST API, deployed on Render
+- **Database**: PostgreSQL hosted on Aiven
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get BidCo running locally in minutes
+  </Card>
+  <Card title="Core Features" icon="star" href="/features/auctions">
+    Explore auctions, blind auctions, raffles, and more
+  </Card>
+  <Card title="Architecture" icon="sitemap" href="/architecture/overview">
+    Understand the full-stack structure
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Browse all REST endpoints
+  </Card>
+</CardGroup>
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Normal Auctions" icon="gavel">
+    Open bidding where all participants can see the current highest bid and compete in real time.
+  </Card>
+  <Card title="Blind Auctions" icon="eye-slash">
+    Secret bidding where bids are hidden from other participants until the auction closes.
+  </Card>
+  <Card title="Raffles" icon="ticket">
+    Points-based raffle entries. Users spend points to participate; a winner is drawn at the end.
+  </Card>
+  <Card title="JWT Authentication" icon="lock">
+    Secure token-based authentication for users, with a separate login flow for expert workers.
+  </Card>
+  <Card title="Image Uploads" icon="image">
+    Attach product images when creating auctions or raffles, stored on the backend filesystem.
+  </Card>
+  <Card title="Admin Dashboard" icon="shield">
+    Admin panel for managing raffles and expert (Trabajador) accounts with session-based access control.
+  </Card>
+  <Card title="User Profiles" icon="user">
+    Full profile management with statistics, privacy settings, and balance top-up functionality.
+  </Card>
+  <Card title="Advanced Filtering" icon="filter">
+    Filter and search auctions by type, category, creator, price range, and keyword.
+  </Card>
+</CardGroup>
+
+## Platform Roles
+
+BidCo has three distinct user roles, each with different capabilities:
+
+| Role | Description | Authentication |
+|------|-------------|----------------|
+| **User (Usuario)** | Registered platform member who can bid, create auctions, and enter raffles | JWT token via `/api/usuarios/login` |
+| **Expert (Trabajador)** | Verified specialist with elevated trust, used for expert-managed content | JWT token via expert login |
+| **Admin** | Platform administrator who manages raffles and expert accounts | Session-based via `/api/admin/login` |
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | Angular 19, TypeScript, CSS3 |
+| Backend | Java 17, Spring Boot 3.4, Maven |
+| Database | PostgreSQL (Aiven cloud) |
+| Auth | JWT (jjwt 0.11.5) |
+| ORM | Spring Data JPA / Hibernate |
+| Object mapping | MapStruct 1.5 |
+| Deployment | Vercel (frontend), Render (backend) |

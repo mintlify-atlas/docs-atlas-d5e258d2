@@ -1,0 +1,207 @@
+---
+title: "Raffles"
+description: "Full reference for all /api/sorteos endpoints — create, retrieve, finalize, and filter raffles."
+---
+
+# Raffles
+
+Base path: `/api/sorteos`
+
+A raffle (`Sorteo`) is a points-based draw. Participants spend points to enter (see [Raffle Entries](/api/raffle-entries)), and a winner is selected randomly when the raffle is finalized.
+
+---
+
+## POST /api/sorteos
+
+Create a new raffle.
+
+### Request body
+
+<ParamField body="nombreArticulo" type="string" required>
+  Name of the prize item.
+</ParamField>
+
+<ParamField body="descripcion" type="string" required>
+  Description of the prize item.
+</ParamField>
+
+<ParamField body="fechaInicio" type="string" required>
+  Raffle start date in `YYYY-MM-DD` format.
+</ParamField>
+
+<ParamField body="fechaFin" type="string" required>
+  Raffle end date in `YYYY-MM-DD` format.
+</ParamField>
+
+<ParamField body="puntosNecesarios" type="integer" required>
+  Points required per entry ticket.
+</ParamField>
+
+<ParamField body="creadorId" type="integer" required>
+  `usuarioID` of the user creating the raffle.
+</ParamField>
+
+<ParamField body="imagen" type="string" required>
+  URL or path to the prize image.
+</ParamField>
+
+<ParamField body="categoria" type="string" required>
+  Item category (used for filtering).
+</ParamField>
+
+<ParamField body="ganador" type="integer">
+  Winner's user ID. Null until the raffle is finalized.
+</ParamField>
+
+### Response `201 Created`
+
+<ResponseField name="sorteoID" type="integer">
+  Auto-generated raffle ID.
+</ResponseField>
+
+<ResponseField name="nombreArticulo" type="string">
+  Prize item name.
+</ResponseField>
+
+<ResponseField name="descripcion" type="string">
+  Prize description.
+</ResponseField>
+
+<ResponseField name="fechaInicio" type="string">
+  Start date (`YYYY-MM-DD`).
+</ResponseField>
+
+<ResponseField name="fechaFin" type="string">
+  End date (`YYYY-MM-DD`).
+</ResponseField>
+
+<ResponseField name="puntosNecesarios" type="integer">
+  Points cost per entry.
+</ResponseField>
+
+<ResponseField name="puntosFinales" type="integer">
+  Total points collected across all entries (set on finalization).
+</ResponseField>
+
+<ResponseField name="creadorId" type="integer">
+  Creator's user ID.
+</ResponseField>
+
+<ResponseField name="imagen" type="string">
+  Image URL/path.
+</ResponseField>
+
+<ResponseField name="categoria" type="string">
+  Item category.
+</ResponseField>
+
+<ResponseField name="ganador" type="integer">
+  Winner's user ID (null until finalized).
+</ResponseField>
+
+```bash
+curl -X POST http://localhost:8080/api/sorteos \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{
+    "nombreArticulo": "Gaming Console",
+    "descripcion": "Brand new next-gen console.",
+    "fechaInicio": "2026-05-01",
+    "fechaFin": "2026-05-31",
+    "puntosNecesarios": 50,
+    "creadorId": 1,
+    "imagen": "https://example.com/console.jpg",
+    "categoria": "Electronics"
+  }'
+```
+
+---
+
+## GET /api/sorteos/{id}
+
+Retrieve a single raffle by ID.
+
+### Path parameters
+
+<ParamField path="id" type="integer" required>
+  The raffle's `sorteoID`.
+</ParamField>
+
+### Response `200 OK`
+
+Returns a `SorteoResponseDTO`. See field descriptions above.
+
+```bash
+curl http://localhost:8080/api/sorteos/5
+```
+
+---
+
+## GET /api/sorteos
+
+List all raffles.
+
+### Response `200 OK`
+
+Returns an array of all `SorteoResponseDTO` objects.
+
+```bash
+curl http://localhost:8080/api/sorteos
+```
+
+---
+
+## GET /api/sorteos/filtro
+
+Filter raffles using `FiltroDTO` query parameters.
+
+### Query parameters
+
+<ParamField query="minPrice" type="integer">
+  Minimum points required filter.
+</ParamField>
+
+<ParamField query="maxPrice" type="integer">
+  Maximum points required filter.
+</ParamField>
+
+<ParamField query="categorias" type="string">
+  Comma-separated category names.
+</ParamField>
+
+<ParamField query="dateOrder" type="string">
+  Sort order by start date: `asc` or `desc`.
+</ParamField>
+
+### Response `200 OK`
+
+Returns a filtered array of `SorteoResponseDTO`.
+
+```bash
+curl "http://localhost:8080/api/sorteos/filtro?minPrice=10&maxPrice=100&categorias=Electronics&dateOrder=asc"
+```
+
+---
+
+## PUT /api/sorteos/final/{id}
+
+Finalize a raffle — randomly selects a winner from all entries and updates `ganador` and `puntosFinales`.
+
+### Path parameters
+
+<ParamField path="id" type="integer" required>
+  The raffle's `sorteoID`.
+</ParamField>
+
+### Response `200 OK`
+
+Returns the updated `SorteoResponseDTO` with `ganador` and `puntosFinales` populated.
+
+<Warning>
+This operation is irreversible. Once a winner is assigned the raffle is closed.
+</Warning>
+
+```bash
+curl -X PUT http://localhost:8080/api/sorteos/final/5 \
+  -H "Authorization: Bearer <token>"
+```

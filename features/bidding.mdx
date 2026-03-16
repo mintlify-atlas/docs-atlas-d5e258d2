@@ -1,0 +1,148 @@
+---
+title: "Bidding"
+description: "Understand how the bid system works for auctions and how raffle entries differ from auction bids."
+---
+
+BidCo has two distinct bid types. Auction bids (`Puja`) are monetary offers placed on a `Subasta`. Raffle entries (`PujaSorteo`) are points-based entries into a `Sorteo`. Both share a similar data shape but serve different purposes and use separate endpoints.
+
+## Auction bids (`Puja`)
+
+A `Puja` records a single monetary offer from a user on an auction.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `pujaID` | `long` | Auto-generated bid ID |
+| `importe` | `decimal` | The bid amount |
+| `fecha` | `date` | Date the bid was placed |
+| `subasta` | `Subasta` | The auction this bid belongs to |
+| `pujador` | `Usuario` | The user who placed the bid |
+| `ganadora` | `boolean` | `true` once the auction is finalized and this bid won |
+
+### Placing a bid
+
+```http
+POST /api/pujas
+Content-Type: application/json
+```
+
+Request body — `PujaCreateDTO`:
+
+```json
+{
+  "importe": 85.00,
+  "fecha": "2026-03-12",
+  "subastaId": 12,
+  "pujadorId": 42
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `importe` | `decimal` | Bid amount — must exceed the current highest bid |
+| `fecha` | `date` | Bid date (`YYYY-MM-DD`) |
+| `subastaId` | `long` | ID of the target auction |
+| `pujadorId` | `long` | ID of the bidding user |
+
+<Warning>
+  The `importe` must be strictly greater than the current `precioFinal` on the auction. The backend rejects bids that do not meet the minimum.
+</Warning>
+
+### Getting the highest bid
+
+Use this endpoint to retrieve the current leading bid for an auction:
+
+```http
+GET /api/pujas/mayor/{subastaId}
+```
+
+This is how the frontend displays the live "current price" on normal auction detail pages.
+
+### Fetching a bid by ID
+
+```http
+GET /api/pujas/{id}
+```
+
+### Fetching auctions a user has bid on
+
+Returns all `Subasta` records that the specified user has placed at least one bid on:
+
+```http
+GET /api/pujas/subastas-usuario/{usuarioId}
+```
+
+This powers the **My Bids** section of the user profile.
+
+### Winner flag
+
+The `ganadora` field on a `Puja` starts as `false`. When an admin finalizes an auction via `PUT /api/subastas/final/{id}`, the backend:
+
+1. Finds the `Puja` with the highest `importe`.
+2. Sets `ganadora = true` on that record.
+3. Sets `Subasta.ganador` to the winning user ID.
+4. Sets `Subasta.precioFinal` to the winning `importe`.
+
+## Raffle entries (`PujaSorteo`)
+
+A `PujaSorteo` is a points-based entry into a raffle. It does not compete — all entries have an equal chance of winning regardless of the `puntos` value submitted.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `pujaID` | `long` | Auto-generated entry ID |
+| `puntos` | `decimal` | Points spent on this entry |
+| `fecha` | `date` | Entry date |
+| `sorteo` | `Sorteo` | The raffle this entry belongs to |
+| `pujador` | `Usuario` | The user who entered |
+
+### Submitting a raffle entry
+
+```http
+POST /api/pujas-sorteo
+Content-Type: application/json
+```
+
+Request body — `PujaSorteoCreateDTO`:
+
+```json
+{
+  "puntos": 500,
+  "fecha": "2026-03-14",
+  "sorteoId": 3,
+  "pujadorId": 42
+}
+```
+
+### Fetching a raffle entry by ID
+
+```http
+GET /api/pujas-sorteo/{id}
+```
+
+## Comparing the two bid types
+
+<Tabs>
+  <Tab title="Auction bid (Puja)">
+    - Placed on a `Subasta` (normal or blind)
+    - Monetary — uses `importe` (decimal currency)
+    - Competitive — higher `importe` wins
+    - Endpoint: `POST /api/pujas`
+    - Winner: determined by highest `importe` at finalization
+    - `ganadora` flag is set on the winning record
+  </Tab>
+  <Tab title="Raffle entry (PujaSorteo)">
+    - Placed on a `Sorteo`
+    - Points-based — uses `puntos` (deducted from user balance)
+    - Non-competitive — random draw, not highest bid
+    - Endpoint: `POST /api/pujas-sorteo`
+    - Winner: randomly selected at finalization
+    - No winner flag on the entry; winner recorded on `Sorteo.ganador`
+  </Tab>
+</Tabs>
+
+## Bid visibility in blind auctions
+
+For blind auctions (`subastaNormal: false`), the UI deliberately hides the bid list and the current highest bid from participants. The bid records are stored identically in the `puja` table. The concealment is enforced at the presentation layer — the `GET /api/pujas/mayor/{subastaId}` endpoint is simply not called or rendered while the auction is active.
+
+<Note>
+  If you are building a client against the BidCo API, it is your responsibility to withhold bid data for blind auctions until they are finalized.
+</Note>

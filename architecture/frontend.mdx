@@ -1,0 +1,204 @@
+---
+title: Frontend architecture
+description: Angular 19 project structure, routing, standalone components, service layer, and auth guard for the BidCo frontend.
+---
+
+The BidCo frontend is an Angular 19 application using the standalone component pattern. It is structured around a `views/` directory for page-level components, a `components/` directory for shared UI, and a `services/` directory for all API communication.
+
+## Project structure
+
+```
+frontend/src/app/
+├── app.component.ts          # Root component
+├── app.config.ts             # Application bootstrap configuration
+├── app.routes.ts             # Top-level route definitions
+├── views/                    # Page-level routed components
+│   ├── auction/              # Normal auction listing
+│   ├── blind-auction/        # Blind auction listing
+│   ├── raffle/               # Raffle listing
+│   ├── product/              # Auction or raffle detail page
+│   ├── create-auction/       # Create a new auction
+│   ├── my-bids/              # User's placed bids
+│   ├── my-auctions/          # User's created auctions
+│   ├── search/               # Search results
+│   ├── register/             # User registration
+│   ├── login/                # User login
+│   ├── expert-login/         # Expert login
+│   ├── profile/              # Profile shell (nested router outlet)
+│   │   ├── profile-datos/    # Personal data tab
+│   │   ├── profile-privacidad/  # Privacy settings tab
+│   │   └── profile-estadisticas/ # Statistics tab
+│   └── admin/                # Admin area (guard-protected)
+│       ├── admin-login/      # Admin login
+│       ├── admin-dashboard/  # Admin shell
+│       ├── admin-sorteo/     # Raffle management
+│       └── admin-expert/     # Expert account management
+├── components/               # Shared UI components
+│   ├── header/               # Site header and navigation
+│   ├── footer/               # Site footer
+│   ├── filter/               # Auction/raffle filter panel
+│   ├── product-item/         # Auction/raffle card
+│   └── product-details/      # Detailed view panel
+│   └── expert-comments/      # Expert comment display
+├── services/                 # HTTP and state services
+└── datos_estaticos/          # Static data (e.g., category lists)
+```
+
+## Standalone component pattern
+
+All components in BidCo use Angular's standalone component API. There is no `NgModule`. Components declare their own `imports` array and are bootstrapped through `appConfig`:
+
+```typescript app.config.ts
+import { ApplicationConfig, provideZoneChangeDetection } from '@angular/core';
+import { provideRouter } from '@angular/router';
+import { routes } from './app.routes';
+
+export const appConfig: ApplicationConfig = {
+  providers: [
+    provideZoneChangeDetection({ eventCoalescing: true }),
+    provideRouter(routes)
+  ]
+};
+```
+
+`provideZoneChangeDetection` with `eventCoalescing: true` batches multiple DOM events into a single change detection cycle, reducing unnecessary re-renders.
+
+## Routes
+
+All routes are defined in `app.routes.ts`. The router uses hash-free path-based navigation.
+
+| Path | Component | Notes |
+|------|-----------|-------|
+| `/` | — | Redirects to `/auction` |
+| `/auction` | `AuctionComponent` | Normal auction listing |
+| `/blind-auctions` | `BlindAuctionComponent` | Blind auction listing |
+| `/raffle` | `RaffleComponent` | Raffle listing |
+| `/auction/product/:id` | `ProductComponent` | Detail page; `data.tipo = 'subasta'` |
+| `/blind-auctions/product/:id` | `ProductComponent` | Detail page; `data.tipo = 'subasta'` |
+| `/raffle/product/:id` | `ProductComponent` | Detail page; `data.tipo = 'sorteo'` |
+| `/search` | `SearchComponent` | Search results |
+| `/search/product/:id` | `ProductComponent` | Search result detail; `data.tipo = 'subasta'` |
+| `/create-auction` | `CreateAuctionComponent` | Create a new auction |
+| `/my-bids` | `MyBidsComponent` | Bids placed by the current user |
+| `/my-auctions` | `MyAuctionsComponent` | Auctions created by the current user |
+| `/register` | `RegisterComponent` | New user registration |
+| `/login` | `LoginComponent` | User login |
+| `/expert` | `ExpertLoginComponent` | Expert login |
+| `/profile` | `ProfileComponent` | Profile shell; redirects to `/profile/mis-datos` |
+| `/profile/mis-datos` | `ProfileDatosComponent` | Personal data |
+| `/profile/privacidad` | `ProfilePrivacidadComponent` | Privacy settings |
+| `/profile/estadisticas` | `ProfileEstadisticasComponent` | Bidding statistics |
+| `/admin/login` | `AdminLoginComponent` | Admin login |
+| `/admin` | `AdminDashboardComponent` | Admin shell — guarded by `AdminGuard` |
+| `/admin/sorteo` | `AdminSorteoComponent` | Raffle management (child of `/admin`) |
+| `/admin/expertos` | `AdminExpertComponent` | Expert management (child of `/admin`) |
+| `/**` | — | Redirects to `/auction` |
+
+<Note>
+  The `ProductComponent` is reused for auctions and raffles. The `data.tipo` route data field (`'subasta'` or `'sorteo'`) tells the component which API endpoints to use.
+</Note>
+
+## Service layer
+
+All HTTP communication is handled by injectable services in `src/app/services/`. Each service is provided at the root level (`providedIn: 'root'`) and maps to a backend resource.
+
+<CardGroup cols={2}>
+  <Card title="AuthService" icon="lock">
+    Manages login, logout, and session state using `BehaviorSubject`. Stores JWT in `localStorage`. Decodes the token with `jwt-decode` to identify the user.
+  </Card>
+  <Card title="SubastaService" icon="gavel">
+    Fetches auction listings with filter support. Endpoints: `GET /api/subastas/filtrar`, `/filtro-normal`, `/filtro-ciega`, `/filtro-nombre`, and others.
+  </Card>
+  <Card title="UserService" icon="user">
+    Retrieves and updates user profile data. Endpoint: `GET /api/usuarios/:id`.
+  </Card>
+  <Card title="RaffleService" icon="ticket">
+    Fetches raffle listings and raffle details. Endpoint: `GET /api/sorteos`.
+  </Card>
+  <Card title="ProductService" icon="package">
+    Loads full detail for a single auction or raffle item.
+  </Card>
+  <Card title="CommentService" icon="message-square">
+    Reads and creates expert comments on auctions. Endpoint: `POST /api/comentarios`.
+  </Card>
+  <Card title="CreateAuctionService" icon="plus-circle">
+    Submits new auction creation requests. Endpoint: `POST /api/subastas`.
+  </Card>
+  <Card title="AdminService" icon="shield">
+    Admin-only operations including raffle creation and expert account management.
+  </Card>
+  <Card title="ExpertService" icon="star">
+    Handles expert login and exposes `ExpertoResponse` interface.
+  </Card>
+  <Card title="AuthExpertService" icon="key">
+    Manages expert session state in parallel with `AuthService`.
+  </Card>
+</CardGroup>
+
+### AuthService state model
+
+`AuthService` uses three `BehaviorSubject` instances to track authentication state:
+
+| Subject | Type | Initial value | Purpose |
+|---------|------|---------------|---------|
+| `loggedIn` | `BehaviorSubject<boolean>` | `false` | Whether a user session is active |
+| `currentUser` | `BehaviorSubject<UsuarioResponse \| null>` | `null` | The currently authenticated user object |
+| `userRole` | `BehaviorSubject<string \| null>` | `null` | Role string: `'user'`, `'admin'`, or `'expert'` |
+
+All three are exposed as `Observable` via the `$`-suffixed properties (`isLoggedIn$`, `currentUser$`, `userRole$`).
+
+## AdminGuard
+
+The `/admin` route tree is protected by `AdminGuard`, a `CanActivate` guard:
+
+```typescript admin.guard.ts
+@Injectable({ providedIn: 'root' })
+export class AdminGuard implements CanActivate {
+  constructor(private auth: AuthService, private router: Router) {}
+
+  canActivate(): boolean {
+    const role = (this.auth as any).userRole.getValue?.() || '';
+    if (role === 'admin') {
+      return true;
+    }
+    this.router.navigateByUrl('/admin/login');
+    return false;
+  }
+}
+```
+
+The guard reads the current value of the `userRole` `BehaviorSubject` synchronously. If the role is not `'admin'`, navigation is redirected to `/admin/login`.
+
+## API URL configuration
+
+Services currently hardcode base URLs pointing to `http://localhost:8080`. For example, in `AuthService`:
+
+```typescript auth.service.ts
+private userApiUrl: string = 'http://localhost:8080/api/usuarios';
+```
+
+And in `SubastaService`:
+
+```typescript auction.service.ts
+private subastasUrl = 'http://localhost:8080/api/subastas';
+private pujasSubastasUrl = 'http://localhost:8080/api/pujas';
+```
+
+During local development, the Angular CLI proxy (`proxy.conf.json`) intercepts `/api` paths and forwards them to `http://localhost:8080`, so CORS is not triggered in that environment.
+
+<Tip>
+  To support multiple environments without hardcoded URLs, add `src/environments/environment.ts` and `src/environments/environment.prod.ts` files and reference `environment.apiUrl` in each service.
+</Tip>
+
+## Key dependencies
+
+| Package | Version | Purpose |
+|---------|---------|--------|
+| `@angular/core` | 19.2 | Framework core |
+| `@angular/router` | 19.2 | Client-side routing |
+| `@angular/forms` | 19.2 | Template and reactive forms |
+| `@angular/common/http` | 19.2 | `HttpClient` for REST calls |
+| `rxjs` | 7.8 | Reactive streams and `BehaviorSubject` |
+| `jwt-decode` | 4.0 | Decode JWT payload in the browser |
+| `chart.js` | 4.4 | Charts on the statistics view |
+| `zone.js` | 0.15 | Angular change detection |

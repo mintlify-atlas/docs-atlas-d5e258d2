@@ -1,0 +1,124 @@
+---
+title: "Raffle Entries"
+description: "Full reference for all /api/pujas-sorteo endpoints — purchase raffle entry tickets."
+---
+
+# Raffle Entries
+
+Base path: `/api/pujas-sorteo`
+
+A raffle entry (`PujaSorteo`) represents a user spending points to purchase a ticket for a raffle (`Sorteo`). Each entry record stores the number of points spent, the entry date, the associated raffle, and the participating user.
+
+<Note>
+Points are deducted from the user's balance at the time the entry is created. Ensure the user has sufficient points before submitting a request.
+</Note>
+
+---
+
+## POST /api/pujas-sorteo
+
+Purchase a raffle entry (spend points to enter a raffle).
+
+### Request body
+
+<ParamField body="puntos" type="number" required>
+  Number of points to spend on this entry. Must be a positive decimal value matching the raffle's `puntosNecesarios` cost.
+</ParamField>
+
+<ParamField body="fecha" type="string" required>
+  Date of entry in `YYYY-MM-DD` format.
+</ParamField>
+
+<ParamField body="sorteoId" type="integer" required>
+  The `sorteoID` of the raffle to enter.
+</ParamField>
+
+<ParamField body="pujadorId" type="integer" required>
+  The `usuarioID` of the user purchasing the entry.
+</ParamField>
+
+### Response `201 Created`
+
+<ResponseField name="pujaID" type="integer">
+  Auto-generated raffle entry ID.
+</ResponseField>
+
+<ResponseField name="puntos" type="number">
+  Points spent on this entry.
+</ResponseField>
+
+<ResponseField name="fecha" type="string">
+  Entry date (`YYYY-MM-DD`).
+</ResponseField>
+
+<ResponseField name="sorteoID" type="integer">
+  Associated raffle ID.
+</ResponseField>
+
+<ResponseField name="pujadorID" type="integer">
+  Participating user's ID.
+</ResponseField>
+
+```bash
+curl -X POST http://localhost:8080/api/pujas-sorteo \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{
+    "puntos": 50,
+    "fecha": "2026-05-10",
+    "sorteoId": 5,
+    "pujadorId": 1
+  }'
+```
+
+**Example response:**
+
+```json
+{
+  "pujaID": 101,
+  "puntos": 50,
+  "fecha": "2026-05-10",
+  "sorteoID": 5,
+  "pujadorID": 1
+}
+```
+
+---
+
+## GET /api/pujas-sorteo/{id}
+
+Retrieve a single raffle entry by its ID.
+
+### Path parameters
+
+<ParamField path="id" type="integer" required>
+  The raffle entry's `pujaID`.
+</ParamField>
+
+### Response `200 OK`
+
+Returns a `PujaSorteoResponseDTO`. See field descriptions above.
+
+```bash
+curl http://localhost:8080/api/pujas-sorteo/101 \
+  -H "Authorization: Bearer <token>"
+```
+
+**Example response:**
+
+```json
+{
+  "pujaID": 101,
+  "puntos": 50,
+  "fecha": "2026-05-10",
+  "sorteoID": 5,
+  "pujadorID": 1
+}
+```
+
+### Error responses
+
+| Status | Reason |
+|---|---|
+| `400 Bad Request` | Insufficient points or invalid input |
+| `404 Not Found` | Raffle or user not found |

@@ -1,0 +1,178 @@
+---
+title: "Comments"
+description: "Full reference for all /api/comentarios endpoints — add, retrieve, and edit expert comments on auctions."
+---
+
+# Comments
+
+Base path: `/api/comentarios`
+
+Comments (`Comentarios`) are expert assessments posted by workers (`Trabajadores`) on auctions. Each comment includes a text body and an estimated price for the auctioned item.
+
+<Note>
+Only authenticated workers (experts) should post comments. The `trabajadorId` field must reference a valid `Trabajador` record.
+</Note>
+
+---
+
+## POST /api/comentarios/nuevo
+
+Add a new expert comment to an auction.
+
+### Request body
+
+<ParamField body="comentario" type="string" required>
+  The comment text content.
+</ParamField>
+
+<ParamField body="precioEstimado" type="number" required>
+  The expert's estimated value for the auctioned item (decimal).
+</ParamField>
+
+<ParamField body="trabajadorId" type="integer" required>
+  The `trabajadorID` of the expert posting the comment.
+</ParamField>
+
+<ParamField body="subastaID" type="integer" required>
+  The `subastaID` of the auction being commented on.
+</ParamField>
+
+### Response `201 Created`
+
+<ResponseField name="comentarioID" type="integer">
+  Auto-generated comment ID.
+</ResponseField>
+
+<ResponseField name="comentario" type="string">
+  Comment text.
+</ResponseField>
+
+<ResponseField name="precioEstimado" type="number">
+  Expert's estimated price.
+</ResponseField>
+
+<ResponseField name="trabajadorID" type="integer">
+  ID of the expert who posted the comment.
+</ResponseField>
+
+<ResponseField name="subastaID" type="integer">
+  ID of the auction the comment belongs to.
+</ResponseField>
+
+```bash
+curl -X POST http://localhost:8080/api/comentarios/nuevo \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{
+    "comentario": "This is a genuine 1972 Omega Constellation in excellent condition.",
+    "precioEstimado": 850.00,
+    "trabajadorId": 3,
+    "subastaID": 10
+  }'
+```
+
+---
+
+## GET /api/comentarios/{id}
+
+Retrieve a single comment by its ID.
+
+### Path parameters
+
+<ParamField path="id" type="integer" required>
+  The comment's `comentarioID`.
+</ParamField>
+
+### Response `200 OK`
+
+Returns a `ComentarioResponseDTO`.
+
+```bash
+curl http://localhost:8080/api/comentarios/7
+```
+
+### Error responses
+
+| Status | Reason |
+|---|---|
+| `404 Not Found` | Comment not found — returns `null` body |
+
+---
+
+## GET /api/comentarios/subasta/{subastaId}
+
+Retrieve all comments for a specific auction.
+
+### Path parameters
+
+<ParamField path="subastaId" type="integer" required>
+  The `subastaID` of the auction.
+</ParamField>
+
+### Response `200 OK`
+
+Returns an array of `ComentarioResponseDTO` objects. Returns an empty array if no comments exist.
+
+```bash
+curl http://localhost:8080/api/comentarios/subasta/10
+```
+
+**Example response:**
+
+```json
+[
+  {
+    "comentarioID": 7,
+    "comentario": "Genuine 1972 Omega Constellation in excellent condition.",
+    "precioEstimado": 850.00,
+    "trabajadorID": 3,
+    "subastaID": 10
+  }
+]
+```
+
+---
+
+## PUT /api/comentarios/editar/{id}
+
+Update an existing comment by its ID.
+
+### Path parameters
+
+<ParamField path="id" type="integer" required>
+  The `comentarioID` of the comment to update.
+</ParamField>
+
+### Request body
+
+<ParamField body="comentario" type="string" required>
+  Updated comment text.
+</ParamField>
+
+<ParamField body="precioEstimado" type="number" required>
+  Updated estimated price.
+</ParamField>
+
+<ParamField body="trabajadorId" type="integer" required>
+  The `trabajadorID` of the expert (must match the original author).
+</ParamField>
+
+<ParamField body="subastaID" type="integer" required>
+  The `subastaID` of the auction (must match the original comment).
+</ParamField>
+
+### Response `200 OK`
+
+Returns the updated `ComentarioResponseDTO`.
+
+```bash
+curl -X PUT http://localhost:8080/api/comentarios/editar/7 \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{
+    "comentario": "Updated assessment — minor scratches noted on the bezel.",
+    "precioEstimado": 800.00,
+    "trabajadorId": 3,
+    "subastaID": 10
+  }'
+```

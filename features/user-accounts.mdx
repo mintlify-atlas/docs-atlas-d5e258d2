@@ -1,0 +1,244 @@
+---
+title: "User accounts"
+description: "Register, log in, manage your profile, top up your balance, and configure privacy settings."
+---
+
+Every participant on BidCo is a `Usuario`. An account gives you access to bidding on auctions, entering raffles, creating your own auctions, and tracking your activity statistics.
+
+## Registration
+
+Create a new account by posting a `UsuarioCreateDTO`:
+
+```http
+POST /api/usuarios
+Content-Type: application/json
+```
+
+```json
+{
+  "nombreUsuario": "jdoe",
+  "correoElectronico": "jdoe@example.com",
+  "contraseña": "securepass1",
+  "saldo": 0.00,
+  "puntos": 0,
+  "pais": "Spain",
+  "ciudad": "Valladolid",
+  "codigoPostal": "47004",
+  "calle": "Plaza Circular",
+  "numeroPiso": 2,
+  "letraPiso": "B"
+}
+```
+
+### Field reference
+
+| Field | Type | Constraints | Description |
+|-------|------|-------------|-------------|
+| `nombreUsuario` | `string` | 1–100 chars, unique | Display name and login handle |
+| `correoElectronico` | `string` | Valid email, unique | Email address |
+| `contraseña` | `string` | 6–100 chars | Account password |
+| `saldo` | `decimal` | Non-null | Initial balance (typically `0.00`) |
+| `puntos` | `int` | Non-null | Initial points (typically `0`) |
+| `pais` | `string` | Non-null | Country |
+| `ciudad` | `string` | Non-null | City |
+| `codigoPostal` | `string` | Non-null | Postal code |
+| `calle` | `string` | Non-null | Street address |
+| `numeroPiso` | `int` | Non-null | Floor number |
+| `letraPiso` | `string` | Optional | Floor letter/unit identifier |
+
+<Note>
+  `nombreUsuario` and `correoElectronico` must be unique across the platform. Duplicate registration attempts return a validation error.
+</Note>
+
+## Login and JWT authentication
+
+Authenticate with username and password to receive a JWT token:
+
+```http
+POST /api/usuarios/login
+Content-Type: application/json
+```
+
+```json
+{
+  "nombreUsuario": "jdoe",
+  "contraseña": "securepass1"
+}
+```
+
+Successful response:
+
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+Include the token in the `Authorization` header for all protected requests:
+
+```http
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+The frontend stores the token in `localStorage` under the key `authToken` and the decoded user object under `authUser`.
+
+## Viewing a profile
+
+Fetch a user by ID:
+
+```http
+GET /api/usuarios/{id}
+```
+
+Or look up by username:
+
+```http
+GET /api/usuarios/buscar?nombreUsuario=jdoe
+```
+
+The response includes all profile fields except the password hash.
+
+## Updating profile data
+
+Send a `PUT` request with the fields you want to change:
+
+```http
+PUT /api/usuarios/{id}
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+```json
+{
+  "nombreUsuario": "jdoe_updated",
+  "correoElectronico": "jdoe_new@example.com",
+  "ciudad": "Madrid",
+  "codigoPostal": "28001",
+  "calle": "Gran Via",
+  "numeroPiso": 5,
+  "letraPiso": "A"
+}
+```
+
+The `UsuarioUpdate` shape mirrors the registration fields minus `contraseña`, `saldo`, and `puntos` — those are managed through their own dedicated endpoints.
+
+## Changing your password
+
+```http
+PATCH /api/usuarios/{id}/password
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+```json
+{
+  "currentPassword": "securepass1",
+  "newPassword": "newpass2026"
+}
+```
+
+The backend validates `currentPassword` before applying the change. A `400` is returned if the current password is incorrect.
+
+## Topping up your balance
+
+Balance (`saldo`) is used to fund auction bids. Add funds to your account:
+
+```http
+PATCH /api/usuarios/{id}/recargar-saldo
+Content-Type: application/json
+```
+
+```json
+{
+  "cantidad": 100.00
+}
+```
+
+The response is the new `saldo` value as a plain decimal:
+
+```json
+250.00
+```
+
+<Tip>
+  The profile **Data** tab in the frontend includes an inline top-up form. Enter an amount and submit to call this endpoint directly.
+</Tip>
+
+## Privacy settings
+
+Each account has three privacy flags, all configurable by the user:
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `privacidadAnonimoPujas` | `false` | Hide your username from public bid lists |
+| `privacidadEstadisticas` | `true` | Allow others to view your statistics |
+| `privacidadPerfilVisible` | `true` | Make your profile visible to other users |
+
+### Fetching current privacy settings
+
+```http
+GET /api/usuarios/{id}/privacidad
+```
+
+Response — `PrivacidadDTO`:
+
+```json
+{
+  "privacidadAnonimoPujas": false,
+  "privacidadEstadisticas": true,
+  "privacidadPerfilVisible": true
+}
+```
+
+### Updating privacy settings
+
+```http
+PUT /api/usuarios/{id}/privacidad
+Content-Type: application/json
+```
+
+```json
+{
+  "privacidadAnonimoPujas": true,
+  "privacidadEstadisticas": false,
+  "privacidadPerfilVisible": true
+}
+```
+
+The response is the full updated `UsuarioResponseDTO`.
+
+## User statistics
+
+Retrieve an activity summary for a user:
+
+```http
+GET /api/usuarios/{id}/stats
+```
+
+Response — `StatsDTO`:
+
+```json
+{
+  "participatedBids": 33,
+  "wonBids": 5,
+  "createdBids": 14,
+  "participatedDraws": 20,
+  "wonDraws": 3,
+  "createdDraws": 0
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `participatedBids` | Auctions the user has placed at least one bid on |
+| `wonBids` | Auctions the user won |
+| `createdBids` | Auctions created by the user |
+| `participatedDraws` | Raffles the user entered |
+| `wonDraws` | Raffles the user won |
+| `createdDraws` | Raffles created by the user (always `0` for regular users) |
+
+The profile **Statistics** tab renders these fields in a Chart.js bar chart comparing participation, wins, and creations across auctions and raffles.
+
+<Note>
+  If `privacidadEstadisticas` is `false`, the statistics endpoint may not be publicly accessible depending on your access control configuration. The data is always available to the account owner.
+</Note>

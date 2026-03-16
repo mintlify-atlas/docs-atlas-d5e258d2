@@ -1,0 +1,132 @@
+---
+title: "Authentication"
+description: "How to authenticate with the BidCo API using JWT tokens and admin sessions."
+---
+
+# Authentication
+
+BidCo uses two distinct authentication mechanisms depending on the actor:
+
+| Actor | Mechanism | Endpoint |
+|---|---|---|
+| Regular users | JWT Bearer token | `POST /api/usuarios/login` |
+| Expert workers (Trabajadores) | JWT Bearer token | `POST /api/trabajadores/login` |
+| Administrators | HTTP session cookie | `POST /api/admin/login` |
+
+---
+
+## User Authentication (JWT)
+
+### 1. Obtain a token
+
+Send the user's credentials to the login endpoint. The `identificador` field accepts either an email address or a username.
+
+```bash
+curl -X POST http://localhost:8080/api/usuarios/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "identificador": "alice@example.com",
+    "contraseña": "secret123"
+  }'
+```
+
+**Response `200 OK`:**
+
+```json
+{
+  "token": "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJhbGljZSIsImlhdCI6..."
+}
+```
+
+### 2. Use the token
+
+Include the token in the `Authorization` header of every subsequent request:
+
+```http
+Authorization: Bearer eyJhbGciOiJIUzUxMiJ9...
+```
+
+```bash
+curl http://localhost:8080/api/usuarios/1 \
+  -H "Authorization: Bearer eyJhbGciOiJIUzUxMiJ9..."
+```
+
+### Token details
+
+| Property | Value |
+|---|---|
+| Algorithm | HS512 |
+| Expiry | 24 hours (86 400 000 ms) |
+| Subject | Username or email identifier |
+
+<Warning>
+Tokens expire after 24 hours. Once expired, the client must re-authenticate to obtain a new token.
+</Warning>
+
+---
+
+## Expert / Worker Authentication (JWT)
+
+The flow is identical to user authentication but uses a separate endpoint and login DTO.
+
+```bash
+curl -X POST http://localhost:8080/api/trabajadores/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "identificador": "expert@example.com",
+    "contraseña": "secret123",
+    "rol": false
+  }'
+```
+
+**Response `200 OK`:**
+
+```json
+{
+  "token": "eyJhbGciOiJIUzUxMiJ9..."
+}
+```
+
+The `rol` boolean field distinguishes worker roles within the system.
+
+---
+
+## Admin Authentication (Session)
+
+Admin authentication is session-based rather than token-based. A successful login sets a server-side session cookie that must be included in subsequent admin requests.
+
+```bash
+curl -X POST http://localhost:8080/api/admin/login \
+  -H "Content-Type: application/json" \
+  -c cookies.txt \
+  -d '{
+    "username": "admin",
+    "password": "adminSecret",
+    "rol": true
+  }'
+```
+
+**Response `200 OK`** — empty body, session cookie set.
+
+Subsequent admin requests must include the session cookie:
+
+```bash
+curl -X POST http://localhost:8080/api/admin/sorteos \
+  -b cookies.txt \
+  -F 'sorteo={"nombreArticulo":"Prize Watch",...};type=application/json' \
+  -F 'imagen=@watch.jpg'
+```
+
+<Note>
+The admin session is managed by the Spring `HttpSession`. Ensure your HTTP client persists the `JSESSIONID` cookie between requests.
+</Note>
+
+---
+
+## Error Responses
+
+| Status | Reason |
+|---|---|
+| `400 Bad Request` | Missing or invalid credentials |
+| `401 Unauthorized` | Incorrect password |
+| `404 Not Found` | User / worker not found |

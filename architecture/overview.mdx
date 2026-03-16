@@ -1,0 +1,114 @@
+---
+title: Architecture overview
+description: High-level overview of BidCo's three-tier architecture, deployment infrastructure, CORS configuration, and JWT authentication flow.
+---
+
+BidCo is a three-tier web application composed of an Angular 19 single-page application, a Spring Boot 3 REST API, and a PostgreSQL database. Each tier is independently deployed and communicates over HTTPS.
+
+## System tiers
+
+<CardGroup cols={3}>
+  <Card title="Frontend" icon="monitor" href="/architecture/frontend">
+    Angular 19 SPA deployed to **Vercel**. Handles all user interaction, routing, and state management. Communicates with the backend exclusively via HTTP.
+  </Card>
+  <Card title="Backend" icon="server" href="/architecture/backend">
+    Spring Boot 3.4 REST API deployed to **Render**. Implements business logic, JWT authentication, and database access via JPA/Hibernate.
+  </Card>
+  <Card title="Database" icon="database" href="/architecture/database">
+    PostgreSQL hosted on **Aiven**. Stores all application data including users, auctions, raffles, bids, and expert comments.
+  </Card>
+</CardGroup>
+
+## Request flow
+
+The following table describes how a typical authenticated request travels through the system:
+
+| Step | Actor | Action |
+|------|-------|--------|
+| 1 | Browser | User performs an action (e.g., place a bid) |
+| 2 | Angular service | Reads `authToken` from `localStorage` and attaches it as `Authorization: Bearer <token>` header |
+| 3 | Vercel CDN | Serves the SPA; forwards API calls to the backend |
+| 4 | Spring Boot | Receives request, validates JWT signature using HS512, extracts subject (user ID) |
+| 5 | Spring Boot | Executes business logic via Service layer, queries PostgreSQL via JPA repository |
+| 6 | Aiven PostgreSQL | Returns query results |
+| 7 | Spring Boot | Maps entity to response DTO, serializes to JSON, returns HTTP response |
+| 8 | Angular service | Receives response, updates component state via RxJS `Observable` |
+
+## Deployment targets
+
+| Tier | Platform | Notes |
+|------|----------|-------|
+| Frontend | [Vercel](https://vercel.com) | Serves the compiled Angular output as a static site |
+| Backend | [Render](https://render.com) | Runs the Spring Boot JAR as a web service |
+| Database | [Aiven](https://aiven.io) | Managed PostgreSQL; connection string injected via environment variable |
+
+## CORS configuration
+
+The Spring Boot backend restricts cross-origin requests to the Angular development server. The `CorsConfig` class registers a global mapping:
+
+```java CorsConfig.java
+@Configuration
+public class CorsConfig implements WebMvcConfigurer {
+
+    @Override
+    public void addCorsMappings(CorsRegistry registry) {
+        registry.addMapping("/**")
+                .allowedOrigins("http://localhost:4200")
+                .allowedMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
+                .allowedHeaders("*")
+                .allowCredentials(true);
+    }
+}
+```
+
+<Note>
+  The current `allowedOrigins` value is `http://localhost:4200`. For production deployments, this must be updated to the Vercel domain of the frontend application.
+</Note>
+
+During local development, the Angular CLI dev server proxies `/api` requests to `http://localhost:8080` using `proxy.conf.json`, so the browser never makes cross-origin requests in that environment:
+
+```json proxy.conf.json
+{
+  "/api": {
+    "target": "http://localhost:8080",
+    "secure": false,
+    "changeOrigin": true,
+    "logLevel": "debug"
+  }
+}
+```
+
+## JWT authentication flow
+
+BidCo uses stateless JWT authentication. Tokens are issued by the backend on successful login and stored client-side in `localStorage`.
+
+<Steps>
+  <Step title="Login request">
+    The Angular `AuthService` sends a `POST /api/usuarios/login` request with `{ identificador, contraseña }`. For admin/expert login, requests go to their respective endpoints.
+  </Step>
+  <Step title="Token issuance">
+    The backend validates credentials, then calls `JwtUtil.generateToken(subject)`. The subject is the user's ID. Tokens are signed with HS512 and expire after 24 hours (`expirationMillis = 86400000`).
+  </Step>
+  <Step title="Token storage">
+    The Angular `AuthService` stores the token in `localStorage` under the key `authToken`. It also decodes the token using `jwt-decode` to extract the subject and fetch the full user profile.
+  </Step>
+  <Step title="Authenticated requests">
+    Subsequent API calls include the header `Authorization: Bearer <token>`. The backend uses `JwtUtil.getClaims(token)` to validate the signature and extract claims.
+  </Step>
+  <Step title="Session restoration">
+    On application startup, `AuthService` reads `authToken` and `authUser` from `localStorage`. If present, it re-fetches the user profile from `GET /api/usuarios/:id` to get fresh data.
+  </Step>
+  <Step title="Logout">
+    `AuthService.logout()` clears `authToken` and `authUser` from `localStorage` and resets all `BehaviorSubject` state to their initial values.
+  </Step>
+</Steps>
+
+## User roles
+
+BidCo has three account types, each with distinct capabilities:
+
+| Role | Entity | Capabilities |
+|------|--------|--------------|
+| `user` | `Usuario` | Browse auctions and raffles, place bids, create auctions, manage profile |
+| `expert` | `Trabajador` (experto = true) | Post expert comments with price estimates on auctions |
+| `admin` | `Trabajador` (experto = false) | Manage raffles, manage expert accounts, access admin dashboard |

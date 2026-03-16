@@ -1,80 +1,277 @@
 ---
 title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+description: "Clone and run BidCo locally. You'll have the backend API and Angular frontend running in under 10 minutes."
 ---
 
-## Get started in three steps
+## Prerequisites
 
-Get your documentation site running locally and make your first customization.
+Make sure the following are installed before you begin:
 
-### Step 1: Set up your local environment
+| Tool | Version | Purpose |
+|------|---------|---------|
+| Git | Any | Clone the repository |
+| JDK | 17+ | Run the Spring Boot backend |
+| Maven | 3.6+ | Build the backend |
+| Node.js | 18+ | Run the Angular frontend |
+| npm | 9+ | Install frontend dependencies |
+| MySQL | 8+ | Local database (or use Aiven cloud) |
+
+<Tip>
+  The Angular CLI is installed as a local dev dependency, so you do not need to install it globally. All `ng` commands below use `npx ng` or the `npm run` scripts in `package.json`.
+</Tip>
+
+---
+
+## Set up BidCo locally
+
+<Steps>
+
+<Step title="Clone the repository">
+
+```bash
+git clone https://github.com/Ivanlaguna511/BidCo.git
+cd BidCo
+```
+
+The repository contains two top-level directories:
+
+```
+BidCo/
+├── backend/     # Spring Boot 3.4 REST API
+├── frontend/    # Angular 19 SPA
+└── database.sql # Schema definition
+```
+
+</Step>
+
+<Step title="Initialize the database">
+
+BidCo ships with a `database.sql` file at the root of the repository. Run it against your MySQL instance to create all tables.
+
+```bash
+mysql -u root -p < database.sql
+```
+
+This creates the following tables: `usuario`, `trabajador`, `subasta`, `puja`, `comentario`, `sorteo`, and `puja_sorteo`.
+
+<Note>
+  The production environment uses PostgreSQL hosted on Aiven. The local schema file uses MySQL-compatible `AUTO_INCREMENT` syntax. If you want to target PostgreSQL locally, replace `AUTO_INCREMENT` with `SERIAL` and adjust dialect settings accordingly.
+</Note>
+
+</Step>
+
+<Step title="Configure the backend">
+
+Open `backend/src/main/resources/application.properties` and update the datasource block to point to your local database:
+
+```properties backend/src/main/resources/application.properties
+spring.application.name=api-rest
+
+# Database connection
+spring.datasource.url=jdbc:mysql://localhost:3306/bidcodb?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+spring.datasource.username=root
+spring.datasource.password=your_password_here
+spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver
+
+# Hibernate / JPA
+spring.jpa.database-platform=org.hibernate.dialect.MySQL8Dialect
+spring.jpa.hibernate.ddl-auto=none
+spring.jpa.show-sql=true
+spring.jpa.properties.hibernate.format_sql=true
+
+# JWT
+jwt.secret=0wLqYh8jJkZ2tP7bA1mN6cV4xR9gUvW3eSrQyDfGhX5uJpMnBvCtFzHlIoK0iEaTd
+jwt.expiration=86400000
+
+# File uploads
+spring.servlet.multipart.max-file-size=10MB
+spring.servlet.multipart.max-request-size=10MB
+```
+
+<Warning>
+  The `jwt.secret` above is the repository default and is publicly known. Generate a new secret for any environment that is not purely local development:
+
+  ```bash
+  openssl rand -hex 64
+  ```
+
+  Replace the `jwt.secret` value with the output.
+</Warning>
+
+**If you are connecting to Aiven (PostgreSQL)**, change the datasource block to:
+
+```properties
+spring.datasource.url=jdbc:postgresql://<your-aiven-host>:<port>/<dbname>?sslmode=require
+spring.datasource.username=<aiven-username>
+spring.datasource.password=<aiven-password>
+spring.datasource.driver-class-name=org.postgresql.Driver
+spring.jpa.database-platform=org.hibernate.dialect.PostgreSQLDialect
+```
+
+</Step>
+
+<Step title="Start the backend">
+
+From the `backend/` directory, build and start the Spring Boot application:
+
+```bash
+cd backend
+mvn clean install
+mvn spring-boot:run
+```
+
+Maven downloads dependencies on the first run. Subsequent starts only need `mvn spring-boot:run`.
+
+Once started, the API is available at `http://localhost:8080`. The backend automatically creates an `uploads/` directory in the project root to store product images.
+
+<Note>
+  Leave this terminal running. The frontend connects to `http://localhost:8080` via the Angular dev proxy.
+</Note>
+
+</Step>
+
+<Step title="Configure the frontend API URL">
+
+The Angular app reads the backend URL from environment files. For local development, the proxy configuration in `frontend/proxy.conf.json` forwards all `/api` requests from the dev server to the backend:
+
+```json frontend/proxy.conf.json
+{
+  "/api": {
+    "target": "http://localhost:8080",
+    "secure": false,
+    "changeOrigin": true,
+    "logLevel": "debug"
+  }
+}
+```
+
+This file is already wired into `angular.json` under the `serve` architect target, so no additional setup is needed. The proxy is active automatically when you run `ng serve` in development mode.
+
+</Step>
+
+<Step title="Install frontend dependencies and start the dev server">
+
+Open a **new terminal** (keep the backend running in the first), then:
+
+```bash
+cd frontend
+npm install
+npm start
+```
+
+`npm start` maps to `ng serve`, which runs the Angular dev server with the proxy config applied. The app is available at `http://localhost:4200`.
+
+<CodeGroup>
+
+```bash npm scripts
+# Start the dev server (default: development configuration)
+npm start
+
+# Build for production
+npm run build
+
+# Build in watch mode (development)
+npm run watch
+
+# Run unit tests
+npm test
+```
+
+```bash Angular CLI directly
+# Equivalent to npm start
+npx ng serve
+
+# Serve with explicit configuration
+npx ng serve --configuration development
+```
+
+</CodeGroup>
+
+</Step>
+
+<Step title="Verify everything is working">
+
+With both servers running, open your browser to `http://localhost:4200`.
+
+You should see the BidCo homepage. To confirm the API connection is live, open your browser devtools **Network** tab and look for requests to `/api/*` — they should return `200` responses proxied from `http://localhost:8080`.
+
+| Service | URL | Expected response |
+|---------|-----|-------------------|
+| Angular dev server | `http://localhost:4200` | BidCo homepage |
+| Spring Boot API | `http://localhost:8080/api/usuarios` | JSON array (empty if no users yet) |
+
+</Step>
+
+</Steps>
+
+---
+
+## Project structure reference
+
+```
+BidCo/
+├── backend/
+│   ├── src/main/java/com/bidco/   # Java source
+│   ├── src/main/resources/
+│   │   └── application.properties # Database, JWT, upload config
+│   ├── uploads/                   # Runtime image storage (auto-created)
+│   └── pom.xml                    # Maven build descriptor (Spring Boot 3.4, Java 17)
+├── frontend/
+│   ├── src/
+│   │   ├── app/
+│   │   │   ├── views/             # Page-level components (auction, raffle, profile, admin)
+│   │   │   ├── components/        # Shared UI components (header, footer, filter)
+│   │   │   └── services/          # HTTP services and route guards
+│   │   └── main.ts
+│   ├── angular.json               # Build and serve configuration
+│   ├── package.json
+│   └── proxy.conf.json            # Dev proxy: /api → http://localhost:8080
+└── database.sql                   # Full schema (MySQL syntax)
+```
+
+---
+
+## Troubleshooting
 
 <AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
+
+<Accordion title="Backend fails to start: 'Communications link failure'">
+  MySQL is not running or the connection URL is wrong. Verify:
+
+  1. MySQL service is running: `sudo systemctl status mysql` (Linux) or check MySQL Workbench (macOS/Windows).
+  2. The database `bidcodb` exists: `mysql -u root -p -e "SHOW DATABASES;"`.
+  3. `spring.datasource.username` and `spring.datasource.password` match your MySQL user.
+</Accordion>
+
+<Accordion title="Frontend shows CORS errors or 0 network requests to /api">
+  The backend is not running or is on a different port.
+
+  1. Confirm the backend is running at `http://localhost:8080`.
+  2. Confirm you started the frontend with `npm start` (not `ng serve --configuration production`), which applies the proxy.
+  3. Check `frontend/proxy.conf.json` — the `target` must be `http://localhost:8080`.
+</Accordion>
+
+<Accordion title="Maven build fails: 'Source option 5 is no longer supported'">
+  Your installed JDK version does not match the required version. The backend requires JDK 17 (`pom.xml` sets `<java.version>17</java.version>`).
+
+  Check your version: `java -version`. If it is below 17, install [JDK 17](https://adoptium.net/).
+</Accordion>
+
+<Accordion title="Image uploads return 500 errors">
+  The backend writes uploaded images to an `uploads/` directory relative to where the process starts. Make sure you run `mvn spring-boot:run` from the `backend/` directory so the path resolves correctly. The directory is created automatically if it does not exist.
+</Accordion>
+
 </AccordionGroup>
 
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+---
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Architecture overview" icon="sitemap" href="/architecture/overview">
+    Understand how the frontend, backend, and database fit together.
+  </Card>
+  <Card title="API reference" icon="code" href="/api/overview">
+    Browse all REST endpoints for auctions, users, bids, and raffles.
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

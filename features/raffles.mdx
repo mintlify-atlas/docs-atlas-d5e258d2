@@ -1,0 +1,187 @@
+---
+title: "Raffles"
+description: "Enter points-based raffles where users spend points for a chance to win. A winner is selected randomly at finalization."
+---
+
+Raffles are a points-driven alternative to competitive bidding. Instead of outbidding other participants, users spend a fixed number of points (`puntosNecesarios`) to enter. At the end of the raffle period, one entrant is selected as the winner at random.
+
+Raffles are created exclusively by admin staff (`Trabajador`) and are stored in the `Sorteo` entity.
+
+## How the points system works
+
+Every `Usuario` account holds a `puntos` balance. To enter a raffle, a user submits a `PujaSorteo` entry that records the points spent. The raffle's `puntosNecesarios` field defines the exact cost per entry.
+
+<CardGroup cols={2}>
+  <Card title="Earn points" icon="star">
+    Users accumulate points through platform activity or via balance top-up workflows managed by the admin.
+  </Card>
+  <Card title="Spend points" icon="ticket">
+    Users spend `puntosNecesarios` points to submit a raffle entry (`PujaSorteo`). Each entry is a separate spend.
+  </Card>
+  <Card title="Random draw" icon="shuffle">
+    At finalization, the backend randomly selects one `PujaSorteo` entry. The corresponding user becomes the winner.
+  </Card>
+  <Card title="Winner recorded" icon="trophy">
+    `Sorteo.ganador` is set to the winning user ID. `puntosFinales` records the total points accumulated across all entries.
+  </Card>
+</CardGroup>
+
+## Raffle lifecycle
+
+<Steps>
+  <Step title="Created by admin">
+    A `Trabajador` (admin staff) creates the raffle with a point cost, dates, category, and image via `POST /api/sorteos`. `puntosFinales` starts at `0` and `ganador` is `null`.
+  </Step>
+  <Step title="Entry period open">
+    Users with sufficient `puntos` submit entries via `POST /api/pujas-sorteo`. Each submission deducts `puntosNecesarios` from the user's balance and adds a `PujaSorteo` record.
+  </Step>
+  <Step title="Finalized">
+    After `fechaFin`, an admin calls `PUT /api/sorteos/final/{id}`. The backend randomly picks a winner from all entries and sets `ganador`. `puntosFinales` is updated to the sum of all entry points.
+  </Step>
+</Steps>
+
+## Browsing raffles
+
+Load all active and past raffles:
+
+```http
+GET /api/sorteos
+```
+
+Example response:
+
+```json
+[
+  {
+    "sorteoID": 3,
+    "nombreArticulo": "LEGO McLaren F1",
+    "descripcion": "1:8 scale LEGO Technic McLaren F1 car. 1,432 pieces.",
+    "fechaInicio": "2026-03-01",
+    "fechaFin": "2026-03-31",
+    "puntosNecesarios": 500,
+    "puntosFinales": 0,
+    "categoria": "Toys",
+    "creadorId": 2,
+    "imagen": "/uploads/lego-f1.jpg",
+    "ganador": null
+  }
+]
+```
+
+## Filtering
+
+Apply price range, category, and date order filters:
+
+```http
+GET /api/sorteos/filtro?minPrice=0&maxPrice=1000&categorias=Toys&dateOrder=ASC
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `minPrice` | `int` | Minimum point cost filter |
+| `maxPrice` | `int` | Maximum point cost filter |
+| `categorias` | `string[]` | One or more category names |
+| `dateOrder` | `string` | Sort by end date: `ASC` or `DESC` |
+
+## Creating a raffle (admin only)
+
+Only a `Trabajador` account can create raffles.
+
+```http
+POST /api/sorteos
+Content-Type: application/json
+```
+
+Request body — `SorteoCreateDTO`:
+
+```json
+{
+  "nombreArticulo": "LEGO McLaren F1",
+  "descripcion": "1:8 scale LEGO Technic McLaren F1 car. 1,432 pieces.",
+  "fechaInicio": "2026-03-01",
+  "fechaFin": "2026-03-31",
+  "puntosNecesarios": 500,
+  "categoria": "Toys",
+  "imagen": "/uploads/lego-f1.jpg",
+  "creadorId": 2
+}
+```
+
+### Required fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `nombreArticulo` | `string` | Prize item title |
+| `descripcion` | `string` | Detailed description |
+| `fechaInicio` | `date` | Raffle start date (`YYYY-MM-DD`) |
+| `fechaFin` | `date` | Raffle end date (`YYYY-MM-DD`) |
+| `puntosNecesarios` | `int` | Points required per entry |
+| `categoria` | `string` | Item category |
+| `imagen` | `string` | Image path or URL |
+| `creadorId` | `long` | ID of the creating `Trabajador` |
+
+## Entering a raffle
+
+Authenticated users enter a raffle by posting a `PujaSorteo` entry:
+
+```http
+POST /api/pujas-sorteo
+Content-Type: application/json
+```
+
+Request body — `PujaSorteoCreateDTO`:
+
+```json
+{
+  "puntos": 500,
+  "fecha": "2026-03-14",
+  "sorteoId": 3,
+  "pujadorId": 42
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `puntos` | `decimal` | Points spent — should match `puntosNecesarios` |
+| `fecha` | `date` | Entry date (`YYYY-MM-DD`) |
+| `sorteoId` | `long` | ID of the target raffle |
+| `pujadorId` | `long` | ID of the entering user |
+
+<Warning>
+  The `puntos` field in the entry records the points actually spent. Ensure it matches the raffle's `puntosNecesarios`. Point deduction from the user's balance is handled server-side.
+</Warning>
+
+## Finalizing a raffle
+
+```http
+PUT /api/sorteos/final/{id}
+```
+
+This endpoint returns the updated `SorteoResponseDTO`:
+
+```json
+{
+  "sorteoID": 3,
+  "nombreArticulo": "LEGO McLaren F1",
+  "puntosNecesarios": 500,
+  "puntosFinales": 4500,
+  "ganador": 42,
+  "fechaInicio": "2026-03-01",
+  "fechaFin": "2026-03-31",
+  "categoria": "Toys",
+  "creadorId": 2,
+  "imagen": "/uploads/lego-f1.jpg"
+}
+```
+
+After finalization:
+- `ganador` holds the winning user's ID.
+- `puntosFinales` holds the total points collected from all entries.
+
+## Fetching a single raffle
+
+```http
+GET /api/sorteos/{id}
+```
+
+Returns the full `SorteoResponseDTO` for the specified raffle.

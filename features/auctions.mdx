@@ -1,0 +1,151 @@
+---
+title: "Normal auctions"
+description: "Browse, create, and participate in open auctions where all bids are visible to every participant."
+---
+
+A normal auction is an open bidding event where every participant can see the current highest bid in real time. Users compete by placing increasingly higher bids until the auction's end date, at which point the highest bidder wins the item.
+
+Normal auctions are identified by `subastaNormal: true` on the `Subasta` record.
+
+## Auction lifecycle
+
+<Steps>
+  <Step title="Created">
+    A user submits a new auction with a starting price, dates, category, and product image. The auction is immediately visible in the listing. `precioFinal` is initialised to `precioInicial`.
+  </Step>
+  <Step title="Bidding open">
+    Once `fechaInicial` is reached, authenticated users can place bids. Every new bid must exceed the current `precioFinal`. The bid list is fully public — any visitor can see who bid and how much.
+  </Step>
+  <Step title="Finalized">
+    When the auction period ends, an admin or the creator calls `PUT /api/subastas/final/{id}`. The backend runs `asignarGanadorYActualizarPrecioFinal`, sets `ganador` to the winning user ID, and locks `precioFinal` to the highest bid.
+  </Step>
+</Steps>
+
+<Note>
+  The `ganador` field is `null` until the auction is finalized. A non-null `ganador` means the auction is closed.
+</Note>
+
+## Browsing auctions
+
+The auction listing page loads all normal auctions on init:
+
+```http
+GET /api/subastas/filtrar?normal=true
+```
+
+The response is a list of `SubastaResponseDTO` objects:
+
+```json
+[
+  {
+    "subastaID": 12,
+    "nombreArticulo": "Vintage pocket watch",
+    "descripcion": "Elegant pocket watch with engraved details.",
+    "precioInicial": 50.00,
+    "precioFinal": 70.00,
+    "fechaInicial": "2026-03-01",
+    "fechaFinal": "2026-03-15",
+    "subastaNormal": true,
+    "categoria": "Collectibles",
+    "creadorId": 3,
+    "imagen": "/uploads/watch.jpg",
+    "ganador": null
+  }
+]
+```
+
+## Filtering
+
+Use the filter panel to narrow results. The frontend sends a `FiltroDTO` as query parameters to:
+
+```http
+GET /api/subastas/filtro-normal?minPrice=0&maxPrice=500&categorias=Electronics&dateOrder=ASC
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `minPrice` | `int` | Minimum current price |
+| `maxPrice` | `int` | Maximum current price |
+| `categorias` | `string[]` | One or more category names |
+| `dateOrder` | `string` | Sort by end date: `ASC` or `DESC` |
+
+You can also filter by the creator's auctions:
+
+```http
+GET /api/subastas/filtrar-creador?id=3
+```
+
+Or search by keyword across auction names:
+
+```http
+GET /api/subastas/filtro-nombre?searchTerm=watch&minPrice=0&maxPrice=1000&dateOrder=ASC
+```
+
+## Creating an auction
+
+Any authenticated user can create a normal auction. The request uses `multipart/form-data` to attach a product image alongside the auction data.
+
+```http
+POST /api/subastas
+Content-Type: multipart/form-data
+```
+
+The `subasta` part contains a `SubastaCreateDTO`:
+
+```json
+{
+  "nombreArticulo": "Vintage pocket watch",
+  "descripcion": "Elegant pocket watch with engraved details.",
+  "precioInicial": 50.00,
+  "fechaInicial": "2026-03-01",
+  "fechaFinal": "2026-03-15",
+  "subastaNormal": true,
+  "categoria": "Collectibles",
+  "creadorId": 3
+}
+```
+
+The `imagen` part is the image file upload (any common image format).
+
+### Required fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `nombreArticulo` | `string` | Item title |
+| `descripcion` | `string` | Detailed description |
+| `precioInicial` | `decimal` | Starting price — also used as initial `precioFinal` |
+| `fechaInicial` | `date` | Auction start date (`YYYY-MM-DD`) |
+| `fechaFinal` | `date` | Auction end date (`YYYY-MM-DD`) |
+| `subastaNormal` | `boolean` | Must be `true` for a normal auction |
+| `categoria` | `string` | Item category |
+| `creadorId` | `long` | ID of the creating user |
+
+<Tip>
+  Set `subastaNormal: true` explicitly. The same endpoint is shared with blind auctions; this field determines which type is created.
+</Tip>
+
+## Finalizing an auction
+
+When the bidding period ends, trigger winner assignment:
+
+```http
+PUT /api/subastas/final/{id}
+```
+
+This call has no request body. The backend:
+
+1. Finds the `Puja` record with the highest `importe` for this auction.
+2. Sets `Subasta.ganador` to that bid's `pujador` ID.
+3. Sets `Subasta.precioFinal` to that bid's `importe`.
+
+<Warning>
+  Calling this endpoint more than once on the same auction will overwrite the `ganador` with a fresh calculation. Only finalize when the bidding period has actually ended.
+</Warning>
+
+## Fetching a single auction
+
+```http
+GET /api/subastas/{id}
+```
+
+Returns the full `SubastaResponseDTO` including the current `precioFinal`, `ganador` (if finalized), and all auction metadata.
