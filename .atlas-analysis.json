@@ -1,0 +1,110 @@
+{
+  "projectType": "saas",
+  "projectName": "BidCo",
+  "projectDescription": "BidCo is a full-stack web platform for managing normal and blind auctions, as well as raffles, built with Angular, Spring Boot, and PostgreSQL.",
+  "theme": "maple",
+  "primaryColor": "#1A6BCC",
+  "lightColor": "#3B8FE8",
+  "darkColor": "#0D3F7A",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": ["introduction", "quickstart"]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/auctions",
+              "features/blind-auctions",
+              "features/raffles",
+              "features/bidding",
+              "features/user-accounts"
+            ]
+          },
+          {
+            "group": "Architecture",
+            "pages": [
+              "architecture/overview",
+              "architecture/frontend",
+              "architecture/backend",
+              "architecture/database"
+            ]
+          },
+          {
+            "group": "Admin Guide",
+            "pages": [
+              "admin/overview",
+              "admin/managing-raffles",
+              "admin/managing-experts"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": ["api/overview", "api/authentication"]
+          },
+          {
+            "group": "Endpoints",
+            "pages": [
+              "api/users",
+              "api/auctions",
+              "api/bids",
+              "api/raffles",
+              "api/raffle-entries",
+              "api/comments",
+              "api/admin"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Normal (open) auctions with real-time visible bidding",
+    "Blind auctions where bids are hidden until the auction ends",
+    "Raffles with points-based entry system",
+    "JWT authentication for secure user sessions",
+    "Admin dashboard for managing raffles and expert workers",
+    "User profile with statistics, privacy settings, and balance top-up",
+    "Image upload support for auction and raffle items",
+    "Advanced filtering and search across auctions",
+    "Comment system on auction listings",
+    "Expert (Trabajador) role with dedicated login"
+  ],
+  "publicApiSurface": [
+    "POST /api/usuarios — Register a new user",
+    "POST /api/usuarios/login — Authenticate and receive JWT token",
+    "GET /api/usuarios/{id} — Get user by ID",
+    "PUT /api/usuarios/{id} — Update user profile",
+    "PATCH /api/usuarios/{id}/password — Change password",
+    "GET /api/usuarios/{id}/stats — Get user statistics",
+    "PATCH /api/usuarios/{id}/recargar-saldo — Top up user balance",
+    "POST /api/subastas — Create a new auction (multipart with image)",
+    "GET /api/subastas/{id} — Get auction by ID",
+    "PUT /api/subastas/final/{id} — Finalize auction and assign winner",
+    "GET /api/subastas/filtrar — Filter auctions by type (normal/blind)",
+    "GET /api/subastas/filtrar-creador — Get auctions by creator",
+    "GET /api/subastas/filtro-normal — Filter normal auctions",
+    "GET /api/subastas/filtro-ciega — Filter blind auctions",
+    "GET /api/subastas/filtro-nombre — Search auctions by name",
+    "POST /api/pujas — Place a bid",
+    "GET /api/pujas/{id} — Get bid by ID",
+    "GET /api/pujas/mayor/{subastaId} — Get highest bid for an auction",
+    "GET /api/pujas/subastas-usuario/{usuarioId} — Get auctions a user has bid on",
+    "POST /api/sorteos — Create a raffle entry",
+    "GET /api/sorteos/{id} — Get raffle by ID",
+    "GET /api/sorteos — List all raffles",
+    "PUT /api/sorteos/final/{id} — Finalize raffle and assign winner",
+    "GET /api/sorteos/filtro — Filter raffles",
+    "POST /api/admin/login — Admin login",
+    "POST /api/admin/sorteos — Admin create raffle with image"
+  ]
+}
